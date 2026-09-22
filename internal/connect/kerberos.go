@@ -143,16 +143,30 @@ var signatures = []struct {
 		},
 	},
 	{
-		// The pure-Go Postgres driver ships no GSSAPI implementation, so a
-		// server that asks for one gets an answer it does not understand.
-		Name: "postgres-gssapi",
-		Match: regexp.MustCompile(
-			`(?i)unknown authentication (message|response)|gssapi is not supported`),
+		// This build supplies pgx's GSSAPI provider itself, so a server asking
+		// for GSSAPI is now served. Reaching this message means the connection
+		// was opened without its Kerberos preparation — which Open does — and
+		// naming that is more useful than repeating the driver's pointer at a
+		// third-party package.
+		Name:  "postgres-gssapi-unregistered",
+		Match: regexp.MustCompile(`(?i)no gssapi provider registered`),
+		Error: func() error {
+			return &KerberosError{
+				Stage:  StageCredential,
+				Reason: "this connection was opened without its Kerberos preparation",
+			}
+		},
+	},
+	{
+		// Anything else the server may ask for — SSPI, SCM credentials — is an
+		// authentication method with no implementation behind it at all.
+		Name:  "postgres-unknown-auth",
+		Match: regexp.MustCompile(`(?i)unknown authentication (message|response)`),
 		Error: func() error {
 			return &UnsupportedError{
-				Configuration: "Kerberos against this Postgres server",
-				Reason:        "the server demands GSSAPI, which the pure-Go driver does not provide",
-				Remedy:        "use a scram connection, or a server that accepts one",
+				Configuration: "this server's authentication method",
+				Reason:        "it is neither scram nor Kerberos, the two this build speaks",
+				Remedy:        "configure the server to accept scram or Kerberos for this role",
 			}
 		},
 	},

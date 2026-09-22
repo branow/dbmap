@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/branow/dbmap/internal/engine"
+	"github.com/branow/dbmap/internal/redact"
 )
 
 // modulesQuery fetches the bodies of the named objects.
@@ -32,13 +33,17 @@ WHERE ` + inScope() + `
 // parseModules reads body rows into a map keyed by object key. A body that came
 // back empty is omitted rather than recorded as empty, so a later stage can
 // tell "no body" from "a body that is blank".
-func parseModules(rows [][]string) map[string]string {
-	bodies := make(map[string]string, len(rows))
+//
+// Redaction happens here, on the row, because this is the moment a body
+// arrives: nothing downstream can receive an unredacted one, because
+// redact.Body is the only thing this returns and only the redactor makes them.
+func parseModules(rows [][]string) map[string]redact.Body {
+	bodies := make(map[string]redact.Body, len(rows))
 	for _, row := range rows {
 		if len(row) < 2 || row[1] == "" {
 			continue
 		}
-		bodies[row[0]] = row[1]
+		bodies[row[0]] = redact.Text(row[1])
 	}
 	return bodies
 }
@@ -46,15 +51,17 @@ func parseModules(rows [][]string) map[string]string {
 // Modules fetches module bodies in batches, asking for room between each: a run
 // that began on a healthy server still stops if it stops being one.
 //
-// Bodies come back exactly as the catalog holds them. Redaction happens on
-// arrival above this boundary, before the cache is written — the cache will not
-// accept anything the redactor has not seen.
+// A body is redacted the moment it arrives, before it can be cached and long
+// before it can reach a prompt. Procedure bodies are where credentials end up
+// in practice — a connection string in a linked-server call, a key in an HTTP
+// helper — and the tally rides along on each Body so a build can report that it
+// found one rather than silently swallowing it.
 func (e *Engine) Modules(
 	ctx context.Context,
 	conn engine.Conn,
 	keys []string,
-) (map[string]string, error) {
-	bodies := map[string]string{}
+) (map[string]redact.Body, error) {
+	bodies := map[string]redact.Body{}
 	batches := engine.Batch(keys, engine.ModuleBatch)
 
 	for i, batch := range batches {

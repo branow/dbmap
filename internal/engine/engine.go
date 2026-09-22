@@ -17,6 +17,7 @@ import (
 	"context"
 
 	"github.com/branow/dbmap/internal/catalog"
+	"github.com/branow/dbmap/internal/redact"
 )
 
 // Engine reads one database's catalog. An implementation owns its own type
@@ -37,9 +38,14 @@ type Engine interface {
 
 	// Modules fetches the bodies of the module-bearing objects named by keys,
 	// batched. Keys are catalog.Object.Key values; a key whose object has no
-	// body is simply absent from the result. Bodies come back raw: redaction
-	// happens above this boundary, before the cache.
-	Modules(ctx context.Context, conn Conn, keys []string) (map[string]string, error)
+	// body is simply absent from the result.
+	//
+	// A body comes back as a redact.Body, which only the redactor can produce.
+	// Bodies are redacted ON ARRIVAL, and this is where they arrive — so that
+	// "a secret in the schema never becomes a secret on disk" is a property of
+	// the types rather than a step someone must remember. The cache demands the
+	// same type at the other end, and the two now agree by construction.
+	Modules(ctx context.Context, conn Conn, keys []string) (map[string]redact.Body, error)
 
 	// Sample reads the first n rows of one table for the describer. The caller
 	// has already chosen the projection, because which columns are safe to read

@@ -360,8 +360,28 @@ func TestModulesReadBodiesAsOrdinaryRows(t *testing.T) {
 	if len(bodies) != 1 {
 		t.Fatalf("got %d bodies, want 1: %v", len(bodies), bodies)
 	}
-	if !strings.Contains(bodies["app.order_get"], "\t") {
+	if !strings.Contains(bodies["app.order_get"].String(), "\t") {
 		t.Error("a body containing a tab came back mangled")
+	}
+}
+
+// Redaction on arrival is a property of both engines, not a SQL Server habit.
+func TestModulesRedactOnArrival(t *testing.T) {
+	raw := "CREATE FUNCTION app.notify() RETURNS void AS $$\n" +
+		"  PERFORM send('ops@example.internal');\n$$ LANGUAGE plpgsql"
+	conn := server().On("pg_get_functiondef", [][]string{{"app.notify", raw}})
+
+	bodies, err := New().Modules(context.Background(), conn, []string{"app.notify"})
+	if err != nil {
+		t.Fatalf("Modules: %v", err)
+	}
+
+	body := bodies["app.notify"]
+	if strings.Contains(body.String(), "ops@example.internal") {
+		t.Fatalf("an address reached the caller unredacted: %s", body)
+	}
+	if body.Counts().Total() == 0 {
+		t.Error("what was stripped must be reported, not silently swallowed")
 	}
 }
 
