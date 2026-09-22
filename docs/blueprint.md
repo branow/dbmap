@@ -34,33 +34,34 @@ same shape for every engine: `pgx` and `go-mssqldb` both present `database/sql`,
 differ in their queries, not their plumbing.
 
 the pooling win is **independent of auth**: it holds for postgres, for sql logins, and for
-kerberos alike. only *which driver* provides it is in question below.
+kerberos alike. only *which driver* provides it was in question, and that is now decided.
 
-**G1a — kerberos on sqlserver: pure-go works single-realm, fails cross-realm.** measured, not
-assumed. `go-mssqldb`'s `integratedauth/krb5` is a thin wrapper over `jcmturner/gokrb5`:
+**G1a — DECIDED: kerberos, single realm, pure-go driver.** `go-mssqldb`'s
+`integratedauth/krb5` over `jcmturner/gokrb5`. no cgo, no ODBC, no subprocess anywhere in the
+sqlserver path. binding consequences:
 
-- ccache, keytab and raw-credential login modes all present; EPA / channel binding landed
-  2026-03 -> an instance with Extended Protection on is fine.
-- macOS default ccache is `API:`-type (keychain-backed) and gokrb5 reads `FILE:` only ->
-  `kinit -c FILE:<path>` is mandatory, and is the likeliest cause of field reports that
-  pure-go `-E` "does not work".
-- **cross-realm is not supported.** gokrb5 cannot do it (go-mssqldb #264, open; the upstream
-  fix, gokrb5 #536, has sat unmerged for years), and gokrb5 itself was last pushed 2024-07 —
-  effectively unmaintained. a `Cannot generate SSPI context` failure against an AG listener is
-  usually a `[capaths]` / referral problem, i.e. exactly this gap.
+- **the credential cache must be a `FILE:` ccache.** macOS defaults to `API:` type
+  (keychain-backed) and gokrb5 cannot read it -> `kinit -c FILE:<path>`, and the connection
+  carries `krb5-credcachefile`. `doctor` must detect an unreadable/absent ccache and say
+  exactly this, because it is the failure everyone hits first.
+- connection string shape: `authenticator=krb5`, plus `krb5-credcachefile` (or
+  `krb5-keytabfile` + `krb5-realm` for a service account), `MultiSubnetFailover=true` for an
+  AG listener, `ApplicationIntent=ReadOnly`.
+- EPA / channel binding is supported (landed 2026-03), so an instance with Extended
+  Protection on is fine.
+- **cross-realm is out of scope, by decision.** gokrb5 does not support it (go-mssqldb #264
+  open; upstream fix gokrb5 #536 unmerged for years) and gokrb5 was last pushed 2024-07.
+  a `Cannot generate SSPI context` against a listener is the signature of a `[capaths]` /
+  referral setup -> `doctor` must name cross-realm as an unsupported configuration rather
+  than reporting a generic auth failure, so the diagnosis is not left to the user.
 
--> **30-second decider, run before any code:** `kinit` then `klist`. a `krbtgt/B@A` referral
-ticket means cross-realm, which means pure-go is out. single-realm means pure-go is in.
+**G1b — the escape hatch, if cross-realm ever becomes a requirement**: `alexbrainman/odbc`
+over `msodbcsql18` uses the system GSSAPI, handles cross-realm, and **still pools**, so the
+performance argument survives. it costs cgo and a system dependency. NOT built now — recorded
+so the `Conn` seam in R3 keeps room for it. a per-query `sqlcmd` subprocess is never the
+answer; it is the thing this design exists to remove.
 
-**G1b — the fallback is ODBC, not a subprocess.** `alexbrainman/odbc` over the system ODBC
-driver manager uses the same GSSAPI stack the working `sqlcmd -E` already proves out,
-cross-realm `[capaths]` included, and **still pools** — so the entire G1 performance argument
-survives the fallback intact. cost: cgo, plus a system dependency to install. a per-query
-`sqlcmd` subprocess is last resort only, and even then batches many objects per invocation.
-
-ranked, decided at R3 behind one `Conn` interface: sql login + pure-go (simplest, if the
-environment permits an account) > pure-go krb5 (single-realm only) > ODBC (cross-realm, cgo) >
-sqlcmd subprocess. postgres is unaffected — scram auth, `pgx`, no question.
+postgres is unaffected by all of the above: `pgx`, scram or kerberos, no question.
 
 **G2 — the LLM seam is ours, as a nested module. no third-party abstraction adopted.**
 surveyed: unified wrappers immature (`pkieltyka/go-llm` 4★, `aholstenson/llms-go` 1★,
