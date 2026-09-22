@@ -77,6 +77,8 @@ func NewRoot(f *cmdutil.Factory, build Build) *cobra.Command {
 
 	root.CompletionOptions.DisableDefaultCmd = true
 	root.AddCommand(
+		newIndex(f),
+		newDoctor(f),
 		newConnection(f),
 		newBackend(f),
 		newProfile(f),
