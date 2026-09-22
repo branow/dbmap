@@ -97,11 +97,11 @@ func TestEnvStore(t *testing.T) {
 func TestFileStore(t *testing.T) {
 	path := filepath.Join(t.TempDir(), FileName)
 	store := NewFile(path)
-	if err := store.Set(DBKey("primary"), NewSecret("s3cret")); err != nil {
+	if err := store.Set(DBKey("primary"), NewSecret(password)); err != nil {
 		t.Fatal(err)
 	}
 	secret, err := store.Get(DBKey("primary"))
-	if err != nil || secret.Reveal() != "s3cret" {
+	if err != nil || secret.Reveal() != password {
 		t.Fatalf("secret = %v, err = %v", secret, err)
 	}
 	info, err := os.Stat(path)

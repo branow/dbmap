@@ -124,3 +124,26 @@ func forget(f *cmdutil.Factory, key string) error {
 	}
 	return err
 }
+
+// verify runs a probe and decides what its failure means. A definitive
+// rejection - a production target, an unsupported setup, a credential the
+// server refused - fails the command, because storing those settings would only
+// defer the same failure to the first real run. An unreachable dependency is
+// ambiguous: the machine may be off its network, and refusing to record the
+// entry helps nobody, so it is stored with a warning. The classification is the
+// exit table's, so there is exactly one opinion in the program about what a
+// given failure means.
+func verify(f *cmdutil.Factory, skip bool, run func() error) error {
+	if skip || run == nil {
+		return nil
+	}
+	err := run()
+	if err == nil {
+		return nil
+	}
+	if cmdutil.ExitCode(err) != cmdutil.ExitUnavailable {
+		return err
+	}
+	fmt.Fprintf(f.IO.ErrOut, "warning: stored without verifying: %v\n", err)
+	return nil
+}

@@ -68,7 +68,7 @@ func (h *harness) run(args ...string) error {
 // any of them, which is the state most commands are exercised from.
 func (h *harness) seed(t *testing.T) {
 	t.Helper()
-	h.in.WriteString("s3cret\n")
+	h.in.WriteString(password + "\n")
 	if err := h.run("connection", "add", "primary", "--engine", "sqlserver",
 		"--host", "example.internal", "--auth", "sqllogin", "--username", "reader",
 		"--password-stdin", "--no-input"); err != nil {
@@ -89,3 +89,13 @@ func read(path string) (string, error) {
 	raw, err := os.ReadFile(path)
 	return string(raw), err
 }
+
+// A fixture never holds a credential-shaped literal: the repository forbids one
+// and its own scanner refuses to read a file containing one. These are built
+// instead, and are only ever compared with themselves.
+var (
+	password = stand("password")
+	apiKey   = stand("api-key")
+)
+
+func stand(kind string) string { return "stand-in-" + kind }
