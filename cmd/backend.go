@@ -78,7 +78,7 @@ func addBackend(c *cobra.Command, f *cmdutil.Factory, name string, opts *backend
 
 	entry := config.Backend{Provider: provider, Model: opts.model, BaseURL: opts.baseURL}
 	key := credentials.LLMKey(name)
-	secret, err := readSecret(f, opts.stdin, key, "api key", "--api-key-stdin",
+	secret, from, err := readSecret(f, opts.stdin, key, "api key", "--api-key-stdin",
 		config.NeedsAPIKey(provider))
 	if err != nil {
 		return err
@@ -88,10 +88,8 @@ func addBackend(c *cobra.Command, f *cmdutil.Factory, name string, opts *backend
 			return err
 		}
 	}
-	if !secret.Empty() {
-		if err := f.Store.Set(key, secret); err != nil {
-			return err
-		}
+	if err := remember(f, key, secret, from); err != nil {
+		return err
 	}
 	if err := f.Config.SetBackend(name, entry); err != nil {
 		return err

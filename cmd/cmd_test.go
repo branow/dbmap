@@ -21,6 +21,7 @@ type harness struct {
 	out     *bytes.Buffer
 	errOut  *bytes.Buffer
 	store   *credentials.Fake
+	vars    map[string]string
 }
 
 func newHarness(t *testing.T) *harness {
@@ -29,14 +30,22 @@ func newHarness(t *testing.T) *harness {
 	cfg := config.NewAt(filepath.Join(t.TempDir(), config.Name))
 	cfg.SetEnv(func(string) string { return "" })
 	store := credentials.NewFake()
-	return &harness{
-		factory: &cmdutil.Factory{IO: streams, Config: cfg, Store: store},
-		in:      in,
-		out:     out,
-		errOut:  errOut,
-		store:   store,
+	vars := map[string]string{}
+	h := &harness{
+		vars: vars,
+		factory: &cmdutil.Factory{IO: streams, Config: cfg, Store: store,
+			Env: func(name string) string { return vars[name] }},
+		in:     in,
+		out:    out,
+		errOut: errOut,
+		store:  store,
 	}
+	return h
 }
+
+// setenv gives the harness one environment variable. Nothing in these tests
+// ever reads the machine's real environment.
+func (h *harness) setenv(name, value string) { h.vars[name] = value }
 
 // interactive makes the harness look like a terminal, so prompts run.
 func (h *harness) interactive(answers string) {

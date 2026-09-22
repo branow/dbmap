@@ -265,3 +265,116 @@ func TestAScriptedRunStatesEveryRequiredValue(t *testing.T) {
 		t.Fatalf("error = %v, want a ValidationError naming --engine", err)
 	}
 }
+
+// TestConnectionAddTakesTheSecretFromTheEnvironment walks the remedy the
+// refusal advertises, end to end: no terminal, no stdin, only the variable the
+// message names. The secret must reach the store and never the config file.
+func TestConnectionAddTakesTheSecretFromTheEnvironment(t *testing.T) {
+	h := newHarness(t)
+	h.setenv(credentials.EnvName(credentials.DBKey("local")), "hunter2")
+	err := h.run("connection", "add", "local", "--engine", "postgres", "--auth", "scram",
+		"--host", "db.example.internal", "--database", "appcore", "--username", "reader",
+		"--no-input")
+	if err != nil {
+		t.Fatalf("connection add: %v", err)
+	}
+	if got := h.store.Values[credentials.DBKey("local")]; got != "hunter2" {
+		t.Errorf("stored secret = %q, want the value the environment supplied", got)
+	}
+	raw, err := read(h.factory.Config.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(raw, "hunter2") {
+		t.Fatalf("the config file holds the password:\n%s", raw)
+	}
+}
+
+// TestStdinBeatsTheEnvironment: an explicit flag is the most deliberate thing
+// the user did, so it wins over a variable that may be left over from a shell.
+func TestStdinBeatsTheEnvironment(t *testing.T) {
+	h := newHarness(t)
+	h.setenv(credentials.EnvName(credentials.DBKey("local")), "from-env")
+	h.in.WriteString("from-stdin\n")
+	err := h.run("connection", "add", "local", "--engine", "postgres", "--auth", "scram",
+		"--host", "db.example.internal", "--username", "reader",
+		"--password-stdin", "--no-input")
+	if err != nil {
+		t.Fatalf("connection add: %v", err)
+	}
+	if got := h.store.Values[credentials.DBKey("local")]; got != "from-stdin" {
+		t.Errorf("stored secret = %q, want the value from stdin", got)
+	}
+}
+
+// TestKerberosStoresNothing: the ticket cache is the credential, so no password
+// is asked for and no empty entry is written to the store.
+func TestKerberosStoresNothing(t *testing.T) {
+	engines := []string{"sqlserver", "postgres"}
+	for _, engine := range engines {
+		t.Run(engine, func(t *testing.T) {
+			h := newHarness(t)
+			// A stray variable must not be picked up either: kerberos reads
+			// nothing at all.
+			h.setenv(credentials.EnvName(credentials.DBKey("realm")), "not-a-password")
+			err := h.run("connection", "add", "realm", "--engine", engine,
+				"--auth", "kerberos", "--host", "db.example.internal", "--no-input")
+			if err != nil {
+				t.Fatalf("connection add: %v", err)
+			}
+			entry, err := h.factory.Config.Connection("realm")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if entry.Auth != config.Kerberos {
+				t.Errorf("auth = %q", entry.Auth)
+			}
+			if len(h.store.Values) != 0 {
+				t.Errorf("kerberos wrote to the store: %v", h.store.Values)
+			}
+		})
+	}
+}
+
+// TestAnEnvironmentSecretSurvivesAnUnusableKeychain: the credential has a
+// durable source outside dbmap, so a keychain that cannot hold it is reported
+// rather than fatal. A secret with no second source still fails the command.
+func TestAnEnvironmentSecretSurvivesAnUnusableKeychain(t *testing.T) {
+	broken := &credentials.KeychainError{Op: "write", Key: credentials.DBKey("local"),
+		Err: errors.New("dbus is not running"), Remedy: "use the environment"}
+
+	t.Run("from the environment", func(t *testing.T) {
+		h := newHarness(t)
+		h.store.Err = broken
+		h.setenv(credentials.EnvName(credentials.DBKey("local")), "hunter2")
+		err := h.run("connection", "add", "local", "--engine", "postgres", "--auth", "scram",
+			"--host", "db.example.internal", "--username", "reader", "--no-input")
+		if err != nil {
+			t.Fatalf("connection add: %v", err)
+		}
+		if _, err := h.factory.Config.Connection("local"); err != nil {
+			t.Errorf("the connection was not defined: %v", err)
+		}
+		if !strings.Contains(h.errOut.String(), "was not stored") {
+			t.Errorf("nothing warned about the unstored secret: %q", h.errOut.String())
+		}
+		if strings.Contains(h.errOut.String(), "hunter2") {
+			t.Error("the warning leaked the secret")
+		}
+	})
+
+	t.Run("from stdin", func(t *testing.T) {
+		h := newHarness(t)
+		h.store.Err = broken
+		h.in.WriteString("hunter2\n")
+		err := h.run("connection", "add", "local", "--engine", "postgres", "--auth", "scram",
+			"--host", "db.example.internal", "--username", "reader",
+			"--password-stdin", "--no-input")
+		if !errors.Is(err, broken) {
+			t.Fatalf("error = %v, want the keychain refusal", err)
+		}
+		if _, err := h.factory.Config.Connection("local"); err == nil {
+			t.Error("the connection was defined although its secret was lost")
+		}
+	})
+}

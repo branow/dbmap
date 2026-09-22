@@ -121,7 +121,7 @@ func addConnection(c *cobra.Command, f *cmdutil.Factory, name string,
 		Production: opts.production,
 	}
 	key := credentials.DBKey(name)
-	secret, err := readSecret(f, opts.stdin, key, "password", "--password-stdin",
+	secret, from, err := readSecret(f, opts.stdin, key, "password", "--password-stdin",
 		config.NeedsPassword(auth))
 	if err != nil {
 		return err
@@ -131,10 +131,8 @@ func addConnection(c *cobra.Command, f *cmdutil.Factory, name string,
 			return err
 		}
 	}
-	if !secret.Empty() {
-		if err := f.Store.Set(key, secret); err != nil {
-			return err
-		}
+	if err := remember(f, key, secret, from); err != nil {
+		return err
 	}
 	if err := f.Config.SetConnection(name, entry); err != nil {
 		return err

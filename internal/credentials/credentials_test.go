@@ -49,7 +49,7 @@ func TestKeys(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.key, func(t *testing.T) {
-			if got := envName(tt.key); got != tt.env {
+			if got := EnvName(tt.key); got != tt.env {
 				t.Errorf("env name = %q, want %q", got, tt.env)
 			}
 		})

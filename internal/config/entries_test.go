@@ -214,3 +214,45 @@ func loaded(t *testing.T) *Config {
 	}
 	return c
 }
+
+// TestEngineAuthPairings pins the auth table: both engines authenticate with a
+// kerberos ticket, and each keeps its own password-based mode.
+func TestEngineAuthPairings(t *testing.T) {
+	tests := []struct {
+		engine Engine
+		auth   Auth
+		want   bool
+	}{
+		{engine: SQLServer, auth: SQLLogin, want: true},
+		{engine: SQLServer, auth: Kerberos, want: true},
+		{engine: SQLServer, auth: SCRAM, want: false},
+		{engine: Postgres, auth: SCRAM, want: true},
+		{engine: Postgres, auth: Kerberos, want: true},
+		{engine: Postgres, auth: SQLLogin, want: false},
+	}
+	for _, tt := range tests {
+		t.Run(string(tt.engine)+"/"+string(tt.auth), func(t *testing.T) {
+			_, err := ParseAuth(tt.engine, string(tt.auth))
+			if (err == nil) != tt.want {
+				t.Fatalf("ParseAuth = %v, want accepted = %v", err, tt.want)
+			}
+			entry := Connection{Engine: tt.engine, Host: "example.internal", Auth: tt.auth}
+			if err := New().SetConnection("primary", entry); (err == nil) != tt.want {
+				t.Errorf("SetConnection = %v, want accepted = %v", err, tt.want)
+			}
+		})
+	}
+}
+
+// TestKerberosNeedsNoStoredCredential: the ticket is the credential, so neither
+// a password nor a login name is demanded.
+func TestKerberosNeedsNoStoredCredential(t *testing.T) {
+	if NeedsPassword(Kerberos) || NeedsUsername(Kerberos) {
+		t.Error("kerberos is being asked for a stored credential")
+	}
+	for _, auth := range []Auth{SQLLogin, SCRAM} {
+		if !NeedsPassword(auth) || !NeedsUsername(auth) {
+			t.Errorf("%s is not being asked for a password and a login name", auth)
+		}
+	}
+}

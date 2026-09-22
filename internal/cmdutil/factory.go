@@ -48,6 +48,17 @@ type Factory struct {
 	Store  credentials.Store
 	Flags  Flags
 	Probes Probes
+	// Env reads the process environment. It is a field so a test supplies its
+	// own, and so nothing in a test can reach the machine's real variables.
+	Env func(string) string
+}
+
+// EnvSecret returns the secret the environment already carries for a key. It is
+// the path that keeps a headless run from being a dead end: a command can take
+// a credential with no terminal, no stdin and no keychain read.
+func (f *Factory) EnvSecret(key string) (credentials.Secret, bool) {
+	secret, err := credentials.NewEnv(f.Env).Get(key)
+	return secret, err == nil
 }
 
 // Writer returns the output writer for the resolved format.

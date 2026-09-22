@@ -136,3 +136,24 @@ func TestBackendListShowRemove(t *testing.T) {
 		t.Error("the backend survived")
 	}
 }
+
+// TestBackendAddTakesTheKeyFromTheEnvironment is the same promise the refusal
+// makes for a backend: the variable it names is enough on its own.
+func TestBackendAddTakesTheKeyFromTheEnvironment(t *testing.T) {
+	h := newHarness(t)
+	h.setenv(credentials.EnvName(credentials.LLMKey("main")), "sk-example")
+	if err := h.run("backend", "add", "main", "--provider", "anthropic",
+		"--model", "model-a", "--no-input"); err != nil {
+		t.Fatalf("backend add: %v", err)
+	}
+	if got := h.store.Values[credentials.LLMKey("main")]; got != "sk-example" {
+		t.Errorf("stored api key = %q, want the value the environment supplied", got)
+	}
+	raw, err := read(h.factory.Config.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(raw, "sk-example") {
+		t.Fatalf("the config file holds the api key:\n%s", raw)
+	}
+}

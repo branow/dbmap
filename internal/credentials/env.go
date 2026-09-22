@@ -19,10 +19,10 @@ func NewEnv(lookup func(string) string) *Env {
 }
 
 // Name reports which variable supplies a key, for help text and diagnostics.
-func (e *Env) Name(key string) string { return envName(key) }
+func (e *Env) Name(key string) string { return EnvName(key) }
 
 func (e *Env) Get(key string) (Secret, error) {
-	if value := e.lookup(envName(key)); value != "" {
+	if value := e.lookup(EnvName(key)); value != "" {
 		return NewSecret(value), nil
 	}
 	return Secret{}, &NotFoundError{Key: key}

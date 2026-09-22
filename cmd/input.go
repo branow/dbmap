@@ -38,39 +38,80 @@ func confirm(f *cmdutil.Factory, label string, def bool) (bool, error) {
 	return f.IO.Confirm(label, def)
 }
 
-// readSecret obtains a credential: from stdin for a scripted run, from a hidden
-// prompt for a person, and from neither when the entry needs no secret. The
+// source records where a secret came from. It matters after the fact: a
+// keychain that cannot store an environment-supplied secret has lost nothing,
+// because the environment supplies it again on every run.
+type source int
+
+const (
+	sourceNone source = iota
+	sourceStdin
+	sourceEnv
+	sourcePrompt
+)
+
+// readSecret obtains a credential, in the order a user expects to be obeyed:
+// the explicit --…-stdin flag, then the environment variable for this key, then
+// a hidden prompt. Nothing is asked for when the entry needs no secret. The
 // value is returned, never echoed and never stored in the config file.
 func readSecret(f *cmdutil.Factory, fromStdin bool, key, label, flag string,
-	required bool) (credentials.Secret, error) {
+	required bool) (credentials.Secret, source, error) {
 	if fromStdin {
 		raw, err := f.IO.ReadAll()
 		if err != nil {
-			return credentials.Secret{}, err
+			return credentials.Secret{}, sourceNone, err
 		}
 		if raw == "" && required {
-			return credentials.Secret{}, &cmdutil.ValidationError{
+			return credentials.Secret{}, sourceNone, &cmdutil.ValidationError{
 				Field: flag, Reason: "no value arrived on stdin"}
 		}
-		return credentials.NewSecret(raw), nil
+		return credentials.NewSecret(raw), sourceStdin, nil
 	}
+	// An auth mode that carries no password is asked nothing and reads nothing:
+	// the ticket cache is the credential, and the store stays empty.
 	if !required {
-		return credentials.Secret{}, nil
+		return credentials.Secret{}, sourceNone, nil
+	}
+	if secret, ok := f.EnvSecret(key); ok {
+		return secret, sourceEnv, nil
 	}
 	if !f.IO.CanPrompt() {
-		return credentials.Secret{}, &cmdutil.ValidationError{
+		return credentials.Secret{}, sourceNone, &cmdutil.ValidationError{
 			Field:  label,
-			Reason: fmt.Sprintf("required; use %s or set %s", flag, credentials.NewEnv(nil).Name(key)),
+			Reason: fmt.Sprintf("required; use %s or set %s", flag, credentials.EnvName(key)),
 		}
 	}
 	raw, err := f.IO.PromptPassword(label)
 	if err != nil {
-		return credentials.Secret{}, err
+		return credentials.Secret{}, sourceNone, err
 	}
 	if raw == "" {
-		return credentials.Secret{}, &cmdutil.ValidationError{Field: label, Reason: "required"}
+		return credentials.Secret{}, sourceNone,
+			&cmdutil.ValidationError{Field: label, Reason: "required"}
 	}
-	return credentials.NewSecret(raw), nil
+	return credentials.NewSecret(raw), sourcePrompt, nil
+}
+
+// remember stores a secret under its key. A keychain that refuses one the
+// environment supplied is reported and survived: the credential has a durable
+// source outside dbmap, so the entry is still worth defining. A secret that
+// arrived from stdin or a prompt has no second source, so refusing to store it
+// fails the command rather than losing it.
+func remember(f *cmdutil.Factory, key string, secret credentials.Secret, from source) error {
+	if secret.Empty() {
+		return nil
+	}
+	err := f.Store.Set(key, secret)
+	if err == nil || from != sourceEnv {
+		return err
+	}
+	var refused *credentials.KeychainError
+	if !errors.As(err, &refused) {
+		return err
+	}
+	fmt.Fprintf(f.IO.ErrOut, "warning: %s was not stored (%v); %s supplies it\n",
+		key, refused.Err, credentials.EnvName(key))
+	return nil
 }
 
 // forget removes a stored secret, treating an absent one as already gone: a

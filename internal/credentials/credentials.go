@@ -64,9 +64,10 @@ type Store interface {
 	Delete(key string) error
 }
 
-// envName maps a store key to the environment variable that can supply it:
-// db:main becomes DBMAP_SECRET_DB_MAIN.
-func envName(key string) string {
+// EnvName maps a store key to the environment variable that can supply it:
+// db:main becomes DBMAP_SECRET_DB_MAIN. It is exported because a command that
+// cannot find a secret has to name the variable that would have carried it.
+func EnvName(key string) string {
 	clean := strings.Map(func(r rune) rune {
 		switch {
 		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':

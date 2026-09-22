@@ -6,12 +6,12 @@ import (
 	"strconv"
 )
 
-// engines lists the engines, and auths lists which authentication modes each
-// one accepts. Both are tables walked by the validator, never an if-ladder:
-// adding an engine is adding a row.
+// auths lists which authentication modes each engine accepts. It is a table
+// walked by the validator, never an if-ladder: an engine gains a mode by
+// gaining a row here, with no command code touched.
 var auths = map[Engine][]Auth{
 	SQLServer: {SQLLogin, Kerberos},
-	Postgres:  {SCRAM},
+	Postgres:  {SCRAM, Kerberos},
 }
 
 // providers lists the llm providers and whether each one needs an api key. A
