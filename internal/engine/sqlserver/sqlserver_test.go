@@ -289,13 +289,41 @@ func TestModulesReadBodiesAsOrdinaryRows(t *testing.T) {
 	if len(bodies) != 1 {
 		t.Fatalf("got %d bodies, want 1: %v", len(bodies), bodies)
 	}
-	if !strings.Contains(bodies["app.OrderGet"], "\t") {
+	if !strings.Contains(bodies["app.OrderGet"].String(), "\t") {
 		t.Error("a body containing a tab came back mangled")
 	}
 	for _, statement := range conn.Statements() {
 		if strings.Contains(statement, "~~OBJ~~") {
 			t.Error("the sentinel hack survived the port")
 		}
+	}
+}
+
+// A body is redacted at the moment it arrives, which is here. The type says so:
+// only the redactor produces a redact.Body, so no caller can be handed raw text
+// and no caller has to remember to clean it.
+func TestModulesRedactOnArrival(t *testing.T) {
+	// A mail call carrying a distribution list is the redaction that actually
+	// fired in the measured corpus: 7 addresses across 622 procedure bodies,
+	// and no credentials at all.
+	raw := "CREATE PROCEDURE app.Notify\nAS\n" +
+		"EXEC msdb.dbo.sp_send_dbmail @recipients = 'ops@example.internal'"
+	conn := server().On("sys.sql_modules", [][]string{{"app.Notify", raw}})
+
+	bodies, err := New().Modules(context.Background(), conn, []string{"app.Notify"})
+	if err != nil {
+		t.Fatalf("Modules: %v", err)
+	}
+
+	body := bodies["app.Notify"]
+	if strings.Contains(body.String(), "ops@example.internal") {
+		t.Fatalf("an address reached the caller unredacted: %s", body)
+	}
+	if !strings.Contains(body.String(), "sp_send_dbmail") {
+		t.Error("redaction took the surrounding code with it")
+	}
+	if body.Counts().Total() == 0 {
+		t.Error("what was stripped must be reported, not silently swallowed")
 	}
 }
 

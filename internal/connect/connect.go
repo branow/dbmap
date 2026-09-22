@@ -52,6 +52,11 @@ type dialect struct {
 	Name   string
 	DSN    func(config.Connection, string, environment) (dsn, error)
 	Engine func() engine.Engine
+	// Prepare arranges whatever process-global state this engine's driver needs
+	// before a connection of this shape can be opened. It runs at pool
+	// construction rather than at import, so nothing is seized from a program
+	// that merely links this package. A nil Prepare means there is none.
+	Prepare func(config.Connection, environment) error
 }
 
 var drivers = map[config.Engine]dialect{
@@ -61,10 +66,27 @@ var drivers = map[config.Engine]dialect{
 		Engine: func() engine.Engine { return sqlserver.New() },
 	},
 	config.Postgres: {
-		Name:   "pgx",
-		DSN:    postgresDSN,
-		Engine: func() engine.Engine { return postgres.New() },
+		Name:    "pgx",
+		DSN:     postgresDSN,
+		Engine:  func() engine.Engine { return postgres.New() },
+		Prepare: preparePostgres,
 	},
+}
+
+// preparePostgres registers this package's GSSAPI provider when the connection
+// authenticates with Kerberos. pgx ships the hook and no implementation, so
+// without this a Postgres server that demands GSSAPI answers with a message the
+// driver cannot read.
+func preparePostgres(cfg config.Connection, env environment) error {
+	if cfg.Auth != config.Kerberos {
+		return nil
+	}
+	cache, err := credentialCache(cfg, env)
+	if err != nil {
+		return err
+	}
+	useGSS(cache)
+	return nil
 }
 
 // Engine returns the reader for one engine name, so a caller never has to
@@ -105,7 +127,14 @@ func Open(name string, cfg config.Connection, secret string) (*Pool, error) {
 		}}
 	}
 
-	source, err := spec.DSN(cfg, secret, ambient())
+	env := ambient()
+	if spec.Prepare != nil {
+		if err := spec.Prepare(cfg, env); err != nil {
+			return nil, &ConnectError{Name: name, Engine: cfg.Engine, Err: err}
+		}
+	}
+
+	source, err := spec.DSN(cfg, secret, env)
 	if err != nil {
 		return nil, &ConnectError{Name: name, Engine: cfg.Engine, Err: err}
 	}

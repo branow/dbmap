@@ -447,9 +447,12 @@ func TestDiagnoseNamesWhatTheDriverMessageDoesNot(t *testing.T) {
 			want: "cross-realm",
 		},
 		{
-			name: "a postgres server demanding GSSAPI",
-			err:  errors.New("unknown authentication message: 7"),
-			want: "Kerberos",
+			// GSSAPI itself is served now — this package supplies pgx's
+			// provider — so an unknown method is one that is neither scram nor
+			// Kerberos, and saying so is the useful diagnosis.
+			name: "a postgres server demanding a method this build does not speak",
+			err:  errors.New("unknown authentication message: 9"),
+			want: "authentication method",
 		},
 	}
 
@@ -464,6 +467,22 @@ func TestDiagnoseNamesWhatTheDriverMessageDoesNot(t *testing.T) {
 					unsupported.Configuration, c.want)
 			}
 		})
+	}
+}
+
+// pgx's own message for a missing provider points at a third-party package this
+// build deliberately does not use, so it is replaced with what actually went
+// wrong: the connection was opened without its Kerberos preparation.
+func TestAnUnregisteredProviderIsNamedAsOurOwnMistake(t *testing.T) {
+	err := diagnose(errors.New(
+		"kerberos error: no GSSAPI provider registered, see https://example.invalid"))
+
+	var kerberos *KerberosError
+	if !errors.As(err, &kerberos) {
+		t.Fatalf("error is %T, want *KerberosError", err)
+	}
+	if strings.Contains(err.Error(), "https://") {
+		t.Errorf("the driver's pointer at a third-party package survived: %v", err)
 	}
 }
 

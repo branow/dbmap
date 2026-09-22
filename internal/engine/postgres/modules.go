@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/branow/dbmap/internal/engine"
+	"github.com/branow/dbmap/internal/redact"
 )
 
 // modulesQuery fetches the bodies of the named objects.
@@ -34,26 +35,30 @@ WHERE r.schema || '.' || r.name IN (` + list + `)`
 
 // parseModules reads body rows into a map keyed by object key. A body that came
 // back empty is omitted rather than recorded as empty.
-func parseModules(rows [][]string) map[string]string {
-	bodies := make(map[string]string, len(rows))
+//
+// Redaction happens here, on the row, for the same reason it does on the other
+// engine: this is the moment a body arrives, and redact.Body is the only thing
+// this function can return.
+func parseModules(rows [][]string) map[string]redact.Body {
+	bodies := make(map[string]redact.Body, len(rows))
 	for _, row := range rows {
 		if len(row) < 2 || row[1] == "" {
 			continue
 		}
-		bodies[row[0]] = row[1]
+		bodies[row[0]] = redact.Text(row[1])
 	}
 	return bodies
 }
 
-// Modules fetches module bodies in batches, asking for room between each.
-// Bodies come back exactly as the catalog renders them; redaction happens on
-// arrival above this boundary, before the cache is written.
+// Modules fetches module bodies in batches, asking for room between each. A
+// body is redacted the moment it arrives, before it can be cached and long
+// before it can reach a prompt.
 func (e *Engine) Modules(
 	ctx context.Context,
 	conn engine.Conn,
 	keys []string,
-) (map[string]string, error) {
-	bodies := map[string]string{}
+) (map[string]redact.Body, error) {
+	bodies := map[string]redact.Body{}
 	batches := engine.Batch(keys, engine.ModuleBatch)
 
 	for i, batch := range batches {

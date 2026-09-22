@@ -79,6 +79,46 @@ func (e *UnsupportedError) Error() string {
 	return strings.Join(parts, ": ")
 }
 
+// Stage names where in the Kerberos exchange something failed. It is a field
+// rather than a sentence because the three stages fail for entirely different
+// reasons: a missing realm file, an expired ticket, and a server that said no
+// are three problems with three fixes.
+type Stage string
+
+// The stages of the exchange, in the order they happen.
+const (
+	StageConfig     Stage = "reading the Kerberos configuration"
+	StageCredential Stage = "reading the credential cache"
+	StageTicket     Stage = "requesting a service ticket"
+	StageReply      Stage = "reading the server's answer"
+)
+
+// KerberosError reports a failure inside the GSSAPI exchange this package
+// performs itself, which is the Postgres path: pgx provides the hook and no
+// implementation, so the exchange is ours and so are its failures.
+type KerberosError struct {
+	Stage Stage
+	// Reason is what went wrong, when this package knows better than the
+	// underlying error does.
+	Reason string
+	Err    error
+}
+
+func (e *KerberosError) Error() string {
+	switch {
+	case e.Reason != "" && e.Err != nil:
+		return fmt.Sprintf("kerberos failed %s: %s: %v", e.Stage, e.Reason, e.Err)
+	case e.Reason != "":
+		return fmt.Sprintf("kerberos failed %s: %s", e.Stage, e.Reason)
+	case e.Err != nil:
+		return fmt.Sprintf("kerberos failed %s: %v", e.Stage, e.Err)
+	default:
+		return fmt.Sprintf("kerberos failed %s", e.Stage)
+	}
+}
+
+func (e *KerberosError) Unwrap() error { return e.Err }
+
 // ConnectError reports a connection that could not be opened or reached. It
 // carries the connection NAME and the engine, never the data source name: a
 // DSN holds the password, and an error is the most widely copied string a
