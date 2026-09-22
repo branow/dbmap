@@ -9,12 +9,13 @@ import (
 
 	"github.com/branow/dbmap/internal/cmdutil"
 	"github.com/branow/dbmap/internal/config"
+	"github.com/branow/dbmap/internal/connect"
 	"github.com/branow/dbmap/internal/credentials"
 )
 
 func TestConnectionAddFromFlags(t *testing.T) {
 	h := newHarness(t)
-	h.in.WriteString("s3cret\n")
+	h.in.WriteString(password + "\n")
 	err := h.run("connection", "add", "primary", "--engine", "sqlserver",
 		"--host", "example.internal", "--port", "1433", "--database", "AppCore",
 		"--auth", "sqllogin", "--username", "reader", "--param", "encrypt=true",
@@ -33,7 +34,7 @@ func TestConnectionAddFromFlags(t *testing.T) {
 	if entry.Params["encrypt"] != "true" {
 		t.Errorf("driver params = %v", entry.Params)
 	}
-	if got := h.store.Values[credentials.DBKey("primary")]; got != "s3cret" {
+	if got := h.store.Values[credentials.DBKey("primary")]; got != password {
 		t.Errorf("stored secret = %q", got)
 	}
 	if h.factory.Config.CurrentProfile != "" {
@@ -57,7 +58,7 @@ func TestConfigFileHoldsNoSecret(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(raw, "s3cret") {
+	if strings.Contains(raw, password) {
 		t.Fatalf("the config file holds the password:\n%s", raw)
 	}
 }
@@ -71,7 +72,7 @@ func TestConnectionAddPrompts(t *testing.T) {
 		"scram",            // auth
 		"reader",           // username
 		"n",                // production
-		"s3cret",           // password
+		password,           // password
 	}, "\n") + "\n")
 
 	if err := h.run("connection", "add", "primary"); err != nil {
@@ -87,10 +88,10 @@ func TestConnectionAddPrompts(t *testing.T) {
 	if entry.Production {
 		t.Error("the production answer was not honoured")
 	}
-	if got := h.store.Values[credentials.DBKey("primary")]; got != "s3cret" {
+	if got := h.store.Values[credentials.DBKey("primary")]; got != password {
 		t.Errorf("stored secret = %q", got)
 	}
-	if strings.Contains(h.out.String()+h.errOut.String(), "s3cret") {
+	if strings.Contains(h.out.String()+h.errOut.String(), password) {
 		t.Error("the password was echoed")
 	}
 }
@@ -155,7 +156,7 @@ func TestProbeRunsBeforeAnythingIsStored(t *testing.T) {
 		credentials.Secret) error {
 		return refused
 	}
-	h.in.WriteString("s3cret\n")
+	h.in.WriteString(password + "\n")
 	err := h.run("connection", "add", "primary", "--engine", "sqlserver",
 		"--host", "example.internal", "--auth", "sqllogin", "--username", "reader",
 		"--password-stdin", "--no-input")
@@ -178,7 +179,7 @@ func TestNoVerifySkipsTheProbe(t *testing.T) {
 		called = true
 		return errors.New("should not run")
 	}
-	h.in.WriteString("s3cret\n")
+	h.in.WriteString(password + "\n")
 	err := h.run("connection", "add", "primary", "--engine", "sqlserver",
 		"--host", "example.internal", "--auth", "sqllogin", "--username", "reader",
 		"--password-stdin", "--no-verify", "--no-input")
@@ -271,21 +272,21 @@ func TestAScriptedRunStatesEveryRequiredValue(t *testing.T) {
 // message names. The secret must reach the store and never the config file.
 func TestConnectionAddTakesTheSecretFromTheEnvironment(t *testing.T) {
 	h := newHarness(t)
-	h.setenv(credentials.EnvName(credentials.DBKey("local")), "hunter2")
+	h.setenv(credentials.EnvName(credentials.DBKey("local")), password)
 	err := h.run("connection", "add", "local", "--engine", "postgres", "--auth", "scram",
 		"--host", "db.example.internal", "--database", "appcore", "--username", "reader",
 		"--no-input")
 	if err != nil {
 		t.Fatalf("connection add: %v", err)
 	}
-	if got := h.store.Values[credentials.DBKey("local")]; got != "hunter2" {
+	if got := h.store.Values[credentials.DBKey("local")]; got != password {
 		t.Errorf("stored secret = %q, want the value the environment supplied", got)
 	}
 	raw, err := read(h.factory.Config.Path())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(raw, "hunter2") {
+	if strings.Contains(raw, password) {
 		t.Fatalf("the config file holds the password:\n%s", raw)
 	}
 }
@@ -294,15 +295,15 @@ func TestConnectionAddTakesTheSecretFromTheEnvironment(t *testing.T) {
 // the user did, so it wins over a variable that may be left over from a shell.
 func TestStdinBeatsTheEnvironment(t *testing.T) {
 	h := newHarness(t)
-	h.setenv(credentials.EnvName(credentials.DBKey("local")), "from-env")
-	h.in.WriteString("from-stdin\n")
+	h.setenv(credentials.EnvName(credentials.DBKey("local")), "arrived-in-env")
+	h.in.WriteString("arrived-on-stdin\n")
 	err := h.run("connection", "add", "local", "--engine", "postgres", "--auth", "scram",
 		"--host", "db.example.internal", "--username", "reader",
 		"--password-stdin", "--no-input")
 	if err != nil {
 		t.Fatalf("connection add: %v", err)
 	}
-	if got := h.store.Values[credentials.DBKey("local")]; got != "from-stdin" {
+	if got := h.store.Values[credentials.DBKey("local")]; got != "arrived-on-stdin" {
 		t.Errorf("stored secret = %q, want the value from stdin", got)
 	}
 }
@@ -346,7 +347,7 @@ func TestAnEnvironmentSecretSurvivesAnUnusableKeychain(t *testing.T) {
 	t.Run("from the environment", func(t *testing.T) {
 		h := newHarness(t)
 		h.store.Err = broken
-		h.setenv(credentials.EnvName(credentials.DBKey("local")), "hunter2")
+		h.setenv(credentials.EnvName(credentials.DBKey("local")), password)
 		err := h.run("connection", "add", "local", "--engine", "postgres", "--auth", "scram",
 			"--host", "db.example.internal", "--username", "reader", "--no-input")
 		if err != nil {
@@ -358,7 +359,7 @@ func TestAnEnvironmentSecretSurvivesAnUnusableKeychain(t *testing.T) {
 		if !strings.Contains(h.errOut.String(), "was not stored") {
 			t.Errorf("nothing warned about the unstored secret: %q", h.errOut.String())
 		}
-		if strings.Contains(h.errOut.String(), "hunter2") {
+		if strings.Contains(h.errOut.String(), password) {
 			t.Error("the warning leaked the secret")
 		}
 	})
@@ -366,7 +367,7 @@ func TestAnEnvironmentSecretSurvivesAnUnusableKeychain(t *testing.T) {
 	t.Run("from stdin", func(t *testing.T) {
 		h := newHarness(t)
 		h.store.Err = broken
-		h.in.WriteString("hunter2\n")
+		h.in.WriteString(password + "\n")
 		err := h.run("connection", "add", "local", "--engine", "postgres", "--auth", "scram",
 			"--host", "db.example.internal", "--username", "reader",
 			"--password-stdin", "--no-input")
@@ -377,4 +378,67 @@ func TestAnEnvironmentSecretSurvivesAnUnusableKeychain(t *testing.T) {
 			t.Error("the connection was defined although its secret was lost")
 		}
 	})
+}
+
+// TestAnUnreachableHostStoresWithAWarning is the other half of verify before
+// store: a definitive rejection refuses, but a dependency that could not be
+// reached is ambiguous - the machine may be off its network - so the entry is
+// recorded and the user is told it was not proved.
+func TestAnUnreachableHostStoresWithAWarning(t *testing.T) {
+	h := newHarness(t)
+	h.factory.Probes.Connection = func(context.Context, string, config.Connection,
+		credentials.Secret) error {
+		return &connect.ConnectError{Name: "local", Engine: config.Postgres,
+			Err: errors.New("dial tcp: connection refused")}
+	}
+	h.in.WriteString(password + "\n")
+	err := h.run("connection", "add", "local", "--engine", "postgres", "--auth", "scram",
+		"--host", "db.example.internal", "--username", "reader",
+		"--password-stdin", "--no-input")
+	if err != nil {
+		t.Fatalf("connection add: %v", err)
+	}
+	if _, err := h.factory.Config.Connection("local"); err != nil {
+		t.Errorf("an unreachable host was not recorded: %v", err)
+	}
+	if !strings.Contains(h.errOut.String(), "stored without verifying") {
+		t.Errorf("nothing warned that it was not verified: %q", h.errOut.String())
+	}
+}
+
+// TestADefinitiveRejectionRefuses covers the classes that mean the settings
+// themselves are wrong: storing them would only defer the same failure.
+func TestADefinitiveRejectionRefuses(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+	}{
+		{name: "production target", err: &connect.ProductionError{Name: "local"}},
+		{name: "unsupported setup",
+			err: &connect.UnsupportedError{Configuration: "cross-realm kerberos"}},
+		{name: "credential cache",
+			err: &connect.CredentialCacheError{Path: "/tmp/krb5cc", Type: "API"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := newHarness(t)
+			h.factory.Probes.Connection = func(context.Context, string, config.Connection,
+				credentials.Secret) error {
+				return tt.err
+			}
+			h.in.WriteString(password + "\n")
+			err := h.run("connection", "add", "local", "--engine", "postgres",
+				"--auth", "scram", "--host", "db.example.internal",
+				"--username", "reader", "--password-stdin", "--no-input")
+			if !errors.Is(err, tt.err) {
+				t.Fatalf("error = %v, want the probe's refusal", err)
+			}
+			if _, err := h.factory.Config.Connection("local"); err == nil {
+				t.Error("a refused connection was stored anyway")
+			}
+			if len(h.store.Values) != 0 {
+				t.Error("a refused connection's secret was stored anyway")
+			}
+		})
+	}
 }

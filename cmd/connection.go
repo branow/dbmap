@@ -126,10 +126,12 @@ func addConnection(c *cobra.Command, f *cmdutil.Factory, name string,
 	if err != nil {
 		return err
 	}
-	if !opts.noVerify && f.Probes.Connection != nil {
-		if err := f.Probes.Connection(c.Context(), name, entry, secret); err != nil {
-			return err
-		}
+	var probe func() error
+	if f.Probes.Connection != nil {
+		probe = func() error { return f.Probes.Connection(c.Context(), name, entry, secret) }
+	}
+	if err := verify(f, opts.noVerify, probe); err != nil {
+		return err
 	}
 	if err := remember(f, key, secret, from); err != nil {
 		return err

@@ -27,7 +27,7 @@ func assembled(t *testing.T, policy Policy, keychain *Keychain, env map[string]s
 func TestNoSilentPlaintextFallback(t *testing.T) {
 	store := assembled(t, PolicyNever, stub(nil, broken), nil)
 
-	err := store.Set(DBKey("primary"), NewSecret("s3cret"))
+	err := store.Set(DBKey("primary"), NewSecret(password))
 	var failure *KeychainError
 	if !errors.As(err, &failure) {
 		t.Fatalf("Set error = %v, want KeychainError", err)
@@ -42,11 +42,11 @@ func TestNoSilentPlaintextFallback(t *testing.T) {
 
 func TestPlaintextIsOptIn(t *testing.T) {
 	store := assembled(t, PolicyPlaintext, stub(nil, broken), nil)
-	if err := store.Set(DBKey("primary"), NewSecret("s3cret")); err != nil {
+	if err := store.Set(DBKey("primary"), NewSecret(password)); err != nil {
 		t.Fatalf("Set under the plaintext policy: %v", err)
 	}
 	secret, err := store.Get(DBKey("primary"))
-	if err != nil || secret.Reveal() != "s3cret" {
+	if err != nil || secret.Reveal() != password {
 		t.Fatalf("secret = %v, err = %v", secret, err)
 	}
 	if _, err := os.Stat(store.file.Path); err != nil {

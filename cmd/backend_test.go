@@ -14,7 +14,7 @@ import (
 
 func TestBackendAddFromFlags(t *testing.T) {
 	h := newHarness(t)
-	h.in.WriteString("sk-example\n")
+	h.in.WriteString(apiKey + "\n")
 	err := h.run("backend", "add", "main", "--provider", "anthropic",
 		"--model", "model-a", "--base-url", "https://api.example.internal",
 		"--api-key-stdin", "--no-input")
@@ -28,7 +28,7 @@ func TestBackendAddFromFlags(t *testing.T) {
 	if entry.Model != "model-a" || entry.BaseURL != "https://api.example.internal" {
 		t.Errorf("stored backend = %+v", entry)
 	}
-	if got := h.store.Values[credentials.LLMKey("main")]; got != "sk-example" {
+	if got := h.store.Values[credentials.LLMKey("main")]; got != apiKey {
 		t.Errorf("stored api key = %q", got)
 	}
 	if h.factory.Config.CurrentProfile != "" {
@@ -38,7 +38,7 @@ func TestBackendAddFromFlags(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(raw, "sk-example") {
+	if strings.Contains(raw, apiKey) {
 		t.Fatalf("the config file holds the api key:\n%s", raw)
 	}
 }
@@ -70,7 +70,7 @@ func TestBackendAddRefusesWithoutAKey(t *testing.T) {
 
 func TestBackendAddPrompts(t *testing.T) {
 	h := newHarness(t)
-	h.interactive("anthropic\nmodel-a\n\nsk-example\n")
+	h.interactive("anthropic\nmodel-a\n\n" + apiKey + "\n")
 	if err := h.run("backend", "add", "main"); err != nil {
 		t.Fatalf("backend add: %v", err)
 	}
@@ -81,7 +81,7 @@ func TestBackendAddPrompts(t *testing.T) {
 	if entry.Provider != config.Anthropic || entry.Model != "model-a" {
 		t.Errorf("prompted backend = %+v", entry)
 	}
-	if strings.Contains(h.out.String()+h.errOut.String(), "sk-example") {
+	if strings.Contains(h.out.String()+h.errOut.String(), apiKey) {
 		t.Error("the api key was echoed")
 	}
 }
@@ -93,7 +93,7 @@ func TestBackendProbeRunsBeforeStoring(t *testing.T) {
 		credentials.Secret) error {
 		return refused
 	}
-	h.in.WriteString("sk-example\n")
+	h.in.WriteString(apiKey + "\n")
 	err := h.run("backend", "add", "main", "--provider", "anthropic",
 		"--api-key-stdin", "--no-input")
 	if !errors.Is(err, refused) {
@@ -141,19 +141,19 @@ func TestBackendListShowRemove(t *testing.T) {
 // makes for a backend: the variable it names is enough on its own.
 func TestBackendAddTakesTheKeyFromTheEnvironment(t *testing.T) {
 	h := newHarness(t)
-	h.setenv(credentials.EnvName(credentials.LLMKey("main")), "sk-example")
+	h.setenv(credentials.EnvName(credentials.LLMKey("main")), apiKey)
 	if err := h.run("backend", "add", "main", "--provider", "anthropic",
 		"--model", "model-a", "--no-input"); err != nil {
 		t.Fatalf("backend add: %v", err)
 	}
-	if got := h.store.Values[credentials.LLMKey("main")]; got != "sk-example" {
+	if got := h.store.Values[credentials.LLMKey("main")]; got != apiKey {
 		t.Errorf("stored api key = %q, want the value the environment supplied", got)
 	}
 	raw, err := read(h.factory.Config.Path())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(raw, "sk-example") {
+	if strings.Contains(raw, apiKey) {
 		t.Fatalf("the config file holds the api key:\n%s", raw)
 	}
 }
