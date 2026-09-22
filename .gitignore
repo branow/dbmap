@@ -1,0 +1,21 @@
+# deny everything, then allow what we track
+/*
+!/.gitignore
+!/go.mod
+!/go.sum
+!/main.go
+!/README.md
+!/DESIGN.md
+!/LICENSE
+!/.goreleaser.yml
+!/cmd/
+!/internal/
+!/llm/
+!/docs/
+!/reference/
+!/scripts/
+
+# never tracked, anywhere
+**/dbmap.yml
+**/credentials.yml
+**/*.local.*
