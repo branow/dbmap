@@ -5,8 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-
-	"github.com/zalando/go-keyring"
 )
 
 // stub is a keychain whose three operations are scripted, so every branch is
@@ -19,7 +17,7 @@ func stub(values map[string]string, failure error) *Keychain {
 		}
 		value, ok := values[key]
 		if !ok {
-			return "", keyring.ErrNotFound
+			return "", errMissing
 		}
 		return value, nil
 	}
@@ -35,7 +33,7 @@ func stub(values map[string]string, failure error) *Keychain {
 			return failure
 		}
 		if _, ok := values[key]; !ok {
-			return keyring.ErrNotFound
+			return errMissing
 		}
 		delete(values, key)
 		return nil
@@ -133,5 +131,21 @@ func TestFakeStore(t *testing.T) {
 	fake.Err = broken
 	if _, err := fake.Get(LLMKey("main")); !errors.Is(err, broken) {
 		t.Errorf("error = %v, want the injected failure", err)
+	}
+}
+
+// TestNewKeychainUsesThePlatformBackend catches a build where no platform file
+// supplied the three operations, which would otherwise only show up as a nil
+// call at runtime on a user's machine.
+func TestNewKeychainUsesThePlatformBackend(t *testing.T) {
+	keychain := NewKeychain("")
+	if keychain.Service != Service {
+		t.Errorf("service = %q, want %q", keychain.Service, Service)
+	}
+	if keychain.get == nil || keychain.set == nil || keychain.remove == nil {
+		t.Fatal("the platform backend is not wired")
+	}
+	if named := NewKeychain("other"); named.Service != "other" {
+		t.Errorf("service = %q, want the one given", named.Service)
 	}
 }
