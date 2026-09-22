@@ -91,3 +91,20 @@ func TestNoteIsSilentWhenQuiet(t *testing.T) {
 		t.Error("a quiet run still wrote a note")
 	}
 }
+
+func TestEnvSecret(t *testing.T) {
+	f, _ := factory(t)
+	f.Env = func(name string) string {
+		if name == credentials.EnvName(credentials.DBKey("local")) {
+			return "hunter2"
+		}
+		return ""
+	}
+	secret, ok := f.EnvSecret(credentials.DBKey("local"))
+	if !ok || secret.Reveal() != "hunter2" {
+		t.Fatalf("secret = %v, found = %v", secret, ok)
+	}
+	if _, ok := f.EnvSecret(credentials.DBKey("other")); ok {
+		t.Error("an unset variable reported a secret")
+	}
+}
