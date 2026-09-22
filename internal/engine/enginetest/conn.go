@@ -1,0 +1,144 @@
+// Package enginetest is the in-memory Conn both engine implementations are
+// tested against. No test in this repo opens a database; an engine is proven by
+// what it asks for and what it makes of the answer, and both halves are pure
+// once the connection is a fake.
+package enginetest
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"strings"
+
+	"github.com/branow/dbmap/internal/engine"
+)
+
+// Conn is a scripted engine.Conn. Answers are matched by substring against the
+// statement, in the order they were registered, so a test names the fragment
+// that identifies a query rather than repeating the whole of it.
+type Conn struct {
+	answers []answer
+	calls   []Call
+}
+
+// Call is one statement that reached the connection, with the session the
+// guard asked for around it.
+type Call struct {
+	Session   engine.Session
+	Statement string
+	Args      []any
+}
+
+type answer struct {
+	match string
+	rows  [][]string
+	err   error
+}
+
+// New returns a connection that answers nothing. An unmatched statement returns
+// no rows rather than failing, so a test only scripts the queries it is about.
+func New() *Conn { return &Conn{} }
+
+// On registers rows for every statement containing match.
+func (c *Conn) On(match string, rows [][]string) *Conn {
+	c.answers = append(c.answers, answer{match: match, rows: rows})
+	return c
+}
+
+// Fail registers an error for every statement containing match, which is how a
+// test drives the path where the account cannot see a catalog view.
+func (c *Conn) Fail(match string, err error) *Conn {
+	c.answers = append(c.answers, answer{match: match, err: err})
+	return c
+}
+
+// Query records the call and replays whatever was scripted for it.
+func (c *Conn) Query(
+	_ context.Context,
+	session engine.Session,
+	statement string,
+	args ...any,
+) (engine.Rows, error) {
+	c.calls = append(c.calls, Call{Session: session, Statement: statement, Args: args})
+	for _, a := range c.answers {
+		if strings.Contains(statement, a.match) {
+			if a.err != nil {
+				return nil, a.err
+			}
+			return &rows{data: a.rows}, nil
+		}
+	}
+	return &rows{}, nil
+}
+
+// Calls is every statement that reached the connection, in order.
+func (c *Conn) Calls() []Call { return c.calls }
+
+// Statements is every statement that reached the connection, in order.
+func (c *Conn) Statements() []string {
+	out := make([]string, len(c.calls))
+	for i, call := range c.calls {
+		out[i] = call.Statement
+	}
+	return out
+}
+
+// Last is the statement that reached the connection most recently.
+func (c *Conn) Last() string {
+	if len(c.calls) == 0 {
+		return ""
+	}
+	return c.calls[len(c.calls)-1].Statement
+}
+
+// Only is the single statement a one-query engine method sent, and an error
+// when it sent any other number.
+func (c *Conn) Only() (string, error) {
+	if len(c.calls) != 1 {
+		return "", errors.New("enginetest: expected exactly one statement")
+	}
+	return c.calls[0].Statement, nil
+}
+
+// rows replays scripted string cells through the engine.Rows contract.
+type rows struct {
+	data [][]string
+	at   int
+}
+
+func (r *rows) Columns() ([]string, error) {
+	width := 0
+	if len(r.data) > 0 {
+		width = len(r.data[0])
+	}
+	names := make([]string, width)
+	for i := range names {
+		names[i] = "c"
+	}
+	return names, nil
+}
+
+func (r *rows) Next() bool { r.at++; return r.at <= len(r.data) }
+func (r *rows) Err() error { return nil }
+func (r *rows) Close() error {
+	return nil
+}
+
+// Scan fills the sql.NullString destinations the query path asks for. A cell
+// written as the empty string arrives as a NULL, which is what the engines'
+// parsers have to cope with anyway.
+func (r *rows) Scan(dest ...any) error {
+	row := r.data[r.at-1]
+	for i := range dest {
+		p, ok := dest[i].(*sql.NullString)
+		if !ok {
+			return errors.New("enginetest: the query path must scan into *sql.NullString")
+		}
+		if i < len(row) {
+			*p = sql.NullString{String: row[i], Valid: row[i] != ""}
+			continue
+		}
+		*p = sql.NullString{}
+	}
+	return nil
+}
