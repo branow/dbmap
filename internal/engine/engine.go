@@ -2,9 +2,9 @@
 // and one database's catalog below.
 //
 // Every statement must be provably read-only and carry its engine's resource
-// guard: an earlier tool starved a live SQL Server of memory. Both rules are
-// enforced centrally in Query, because a rule applied per call site is a rule
-// the next call site can forget.
+// guard, because a catalog walk runs against databases it must not disturb.
+// Both rules are enforced centrally in Query: a rule applied per call site is a
+// rule the next call site can forget.
 package engine
 
 import (

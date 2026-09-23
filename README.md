@@ -260,8 +260,11 @@ Windows) and never contains a secret.
 
 ## Safety
 
-`dbmap` is built to be pointed at a large, busy, shared database, and several
-rules exist because an earlier tool of this kind took an instance down:
+`dbmap` is built to be pointed at a large, busy, shared database. A catalog
+walk is exactly the kind of job that can cost a server more than it can spare —
+`COUNT(*)` per table, an `sp_spaceused` loop, or a `SELECT DISTINCT` to learn a
+column's values each read every page they touch — so the expensive query shapes
+are not available to the tool at all:
 
 - Every statement must be provably read-only — it must open with `SELECT` or
   `WITH` and clear a deny list — and is refused **before a connection is
@@ -272,7 +275,7 @@ rules exist because an earlier tool of this kind took an instance down:
 - Row counts and sizes come from catalog statistics. There is no `COUNT(*)` and
   no `sp_spaceused` anywhere in the tool.
 - Samples read `TOP (n)` / `LIMIT n` with **no `ORDER BY`**, so sampling a
-  600-million-row table costs the same as sampling an eleven-row lookup.
+  huge table costs the same as sampling an eleven-row lookup.
 - Server health is checked before every batch, not once at startup. If the
   server says it is short of memory, the run stops. If health cannot be read at
   all, that is *unknown*, never healthy — and the run stops too.
