@@ -1,81 +1,11 @@
 package connect
 
 import (
-	"os"
-	"os/user"
-	"path/filepath"
 	"regexp"
 	"strings"
 
 	"github.com/branow/dbmap/internal/config"
 )
-
-// CredCacheParam is the connection parameter naming the credential cache.
-const CredCacheParam = "krb5-credcachefile"
-
-// RealmParam is the connection parameter naming the Kerberos realm.
-const RealmParam = "krb5-realm"
-
-// ccachePrefix matches an MIT cache type prefix. Two or more letters, so a
-// Windows drive letter is not mistaken for one.
-var ccachePrefix = regexp.MustCompile(`^([A-Za-z]{2,}):(.*)$`)
-
-// environment is the ambient state cache resolution reads, as a struct so a
-// test needs no env var and no file on disk.
-type environment struct {
-	getenv func(string) string
-	stat   func(string) (os.FileInfo, error)
-	uid    string
-}
-
-func ambient() environment {
-	uid := ""
-	if current, err := user.Current(); err == nil {
-		uid = current.Uid
-	}
-	return environment{getenv: os.Getenv, stat: os.Stat, uid: uid}
-}
-
-// credentialCache locates the FILE: cache this connection will use, preferring
-// the connection, then the environment, then the MIT default. Any other type is
-// refused rather than attempted: gokrb5 reads no other kind, and the driver's
-// failure for that case looks like having no ticket at all.
-func credentialCache(cfg config.Connection, env environment) (string, error) {
-	if path := strings.TrimSpace(cfg.Params[CredCacheParam]); path != "" {
-		return readable(strings.TrimPrefix(path, "FILE:"), env)
-	}
-
-	name := strings.TrimSpace(env.getenv("KRB5CCNAME"))
-	if match := ccachePrefix.FindStringSubmatch(name); match != nil {
-		kind, path := strings.ToUpper(match[1]), match[2]
-		if kind != "FILE" {
-			return "", &CredentialCacheError{Type: kind, Path: defaultCache(env)}
-		}
-		return readable(path, env)
-	}
-	if name != "" {
-		return readable(name, env)
-	}
-	return readable(defaultCache(env), env)
-}
-
-// defaultCache is the MIT default, and what the remedy message names.
-func defaultCache(env environment) string {
-	return filepath.Join(os.TempDir(), "krb5cc_"+env.uid)
-}
-
-// readable refuses a cache that is missing or unopenable, so an absent ticket
-// gets the same remedy as a wrong cache type.
-func readable(path string, env environment) (string, error) {
-	info, err := env.stat(path)
-	if err != nil {
-		return "", &CredentialCacheError{Path: path, Err: err}
-	}
-	if info.IsDir() {
-		return "", &CredentialCacheError{Type: "DIR", Path: path}
-	}
-	return path, nil
-}
 
 // crossRealm reports whether a connection's configured realm differs from its
 // host's.

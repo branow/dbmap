@@ -141,11 +141,11 @@ func TestDoctorPrintsTheKerberosCredentialCacheRemedy(t *testing.T) {
 	if !errors.Is(err, error(refused)) {
 		t.Fatalf("err = %v, want the credential cache error", err)
 	}
-	if !strings.Contains(out, "kinit -c FILE:/tmp/krb5cc_501") {
+	if !strings.Contains(out, "kinit") {
 		t.Fatalf("the remedy did not reach the output:\n%s", out)
 	}
-	if !strings.Contains(out, connect.CredCacheParam) {
-		t.Fatalf("the parameter to set was not named:\n%s", out)
+	if !strings.Contains(out, "could not be converted") {
+		t.Fatalf("the output does not say what actually went wrong:\n%s", out)
 	}
 	if !strings.Contains(out, "API") {
 		t.Fatalf("the cache type was not named:\n%s", out)

@@ -154,9 +154,16 @@ func TestTheCauseDecidesNotTheWrapper(t *testing.T) {
 // fixable. main prints err.Error() as it stands, so asserting on it here is
 // asserting on what the user reads.
 func TestTheRemedySurvives(t *testing.T) {
-	cache := &connect.CredentialCacheError{Path: "/tmp/krb5cc_501", Type: "API"}
-	if !strings.Contains(cache.Error(), "kinit -c FILE:/tmp/krb5cc_501") {
+	// Converting a cache type is the tool's job now, so a plain missing ticket
+	// asks only for kinit; the unconvertible case is the one that still names a
+	// file and the override parameter.
+	cache := &connect.CredentialCacheError{Path: "/tmp/krb5cc_501"}
+	if !strings.Contains(cache.Error(), "kinit") {
 		t.Errorf("the credential cache error lost its remedy: %s", cache.Error())
+	}
+	manual := &connect.CredentialCacheError{Path: "/tmp/krb5cc_501", Type: "KEYRING", Unconvertible: true}
+	if !strings.Contains(manual.Error(), "kinit -c FILE:/tmp/krb5cc_501") {
+		t.Errorf("the unconvertible case lost its manual remedy: %s", manual.Error())
 	}
 	for _, stage := range []connect.Stage{connect.StageConfig, connect.StageCredential,
 		connect.StageTicket, connect.StageReply} {

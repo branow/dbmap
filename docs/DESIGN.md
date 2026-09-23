@@ -308,9 +308,13 @@ setup, not query time.
 Kerberos is supported on both engines through a pure-Go implementation, with two
 consequences worth knowing:
 
-- The credential cache must be a `FILE:` cache. macOS defaults to an
-  `API:`-type cache that the pure-Go path cannot read; `dbmap doctor` names this
-  and prints the `kinit` command that fixes it.
+- The pure-Go path reads `FILE:` credential caches only, while macOS defaults to
+  a Keychain-backed `API:` cache that is named nowhere. Converting it is the
+  tool's job, not a step to document: an unreadable cache type is snapshotted
+  into a private `0600` file under the user's cache directory, per connect, so
+  it cannot go stale behind a ticket refresh. The `krb5-credcachefile` parameter
+  remains an override. Only a platform with no conversion tool — MIT's
+  `KEYRING:`/`KCM:` — still asks the user to act.
 - A cross-realm setup works, but the service ticket has to already be in the
   cache: the pure-Go path cannot follow a realm referral to fetch one, though it
   uses one happily. `doctor` prints the two commands that prime it, because the
