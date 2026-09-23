@@ -11,7 +11,7 @@ import (
 	"github.com/branow/dbmap/internal/output"
 )
 
-// The exit table. It is the tool's contract with a script that calls it.
+// The exit table: this tool's contract with a script that calls it.
 const (
 	ExitOK          = 0
 	ExitError       = 1
@@ -22,9 +22,8 @@ const (
 	ExitUnavailable = 6
 )
 
-// Code documents one exit status. The table is data so that the documentation,
-// the mapping below and the test that every code stays reachable all read the
-// same list.
+// Code documents one exit status. The table is data, so the documentation, the
+// mapping below and the reachability test read one list.
 type Code struct {
 	Value   int
 	Name    string
@@ -50,15 +49,11 @@ func Codes() []Code {
 	return out
 }
 
-// rules map an error to an exit code. They are a table walked in order, and
-// every match is errors.Is or errors.As: a message is never inspected, so
-// rewording an error can never change a script's behaviour.
-//
-// Order is meaning, not convenience. The engine and connect packages wrap: a
-// ConnectError carries the cause that produced it, and the cause is the more
-// actionable of the two. So the specific causes are matched first and the
-// wrapper last, which is why a Kerberos failure inside a ConnectError reports
-// auth rather than unavailable.
+// rules map an error to an exit code, walked in order. Every match is errors.Is
+// or errors.As, never a message, so rewording an error cannot change a script's
+// behaviour. Order is meaning: connect and engine wrap, and a wrapped cause is
+// the more actionable of the two, so causes match before wrappers - which is
+// why a Kerberos failure inside a ConnectError reports auth, not unavailable.
 var rules = []struct {
 	code  int
 	match func(error) bool
@@ -66,9 +61,8 @@ var rules = []struct {
 	{ExitCancelled, is(ErrCancelled)},
 	{ExitCancelled, is(iostreams.ErrCancelled)},
 
-	// A refused statement is this tool refusing its own generated SQL, which
-	// is a defect here and not a user error. It is matched before every
-	// wrapper so that nothing can disguise it as an environment problem.
+	// This tool refusing its own generated SQL is a defect here, not a user
+	// error, so it matches before every wrapper that could disguise it.
 	{ExitError, as[*engine.RefusedError]},
 
 	{ExitValidation, is(iostreams.ErrNoInput)},

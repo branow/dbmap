@@ -58,9 +58,9 @@ func TestASecondBuildOverUnchangedInputMakesNoModelCall(t *testing.T) {
 	}
 }
 
-// The second tier is content, not timestamps. A release that ALTERs a procedure
-// back to the bytes already deployed moves the modify signal, so the body is
-// pulled again — and the hash then says there is nothing to describe.
+// The second tier is content, not timestamps: an ALTER back to the deployed
+// bytes moves the modify signal, so the body is pulled again and the hash then
+// says there is nothing to describe.
 func TestAByteIdenticalRedeployIsFetchedButNotDescribed(t *testing.T) {
 	source, client, opts := table(), &model{}, options(t)
 	client.source = source

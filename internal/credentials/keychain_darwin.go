@@ -9,27 +9,22 @@ package credentials
 #include <CoreFoundation/CoreFoundation.h>
 #include <Security/Security.h>
 
-// SecKeychainSetUserInteractionAllowed is declared here because recent SDKs
-// dropped the declaration from SecKeychain.h while Security.framework still
-// exports it. Nothing else silences the login keychain: kSecUseAuthenticationUI
-// governs the data protection keychain, and dbmap's items live in the login
-// keychain, whose access control dialog is the one that blocks forever.
+// Declared here because recent SDKs dropped it from SecKeychain.h while
+// Security.framework still exports it. Nothing else silences the login
+// keychain, where dbmap's items live: kSecUseAuthenticationUI governs the data
+// protection keychain only.
 extern OSStatus SecKeychainSetUserInteractionAllowed(Boolean state);
 
 // kSecUseAuthenticationUIFail is deprecated in favour of an LAContext, which
 // speaks for the data protection keychain only and would drag in
-// LocalAuthentication and Objective-C for a case the process switch above
-// already covers. The key still carries its documented meaning, so the
-// deprecation warning is silenced rather than followed.
+// LocalAuthentication for a case the process switch above already covers.
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
 
 // dbmapSilence refuses the authorization dialog for the call about to be made.
-// Both halves are needed, and they were measured on macOS 15.7: with only the
-// dictionary key, a read of an item stored by an earlier build still blocks on
-// an unseen dialog; with the process switch it returns errSecAuthFailed at
-// once. The switch is process wide, so dbmapRestore must follow. Silencing
-// twice within one operation is harmless.
+// Both halves are needed: with the dictionary key alone, reading an item an
+// earlier build stored still blocks on an unseen dialog; with the process
+// switch it fails at once. That switch is process wide, so dbmapRestore follows.
 static void dbmapSilence(CFMutableDictionaryRef query, int allowUI) {
 	if (allowUI) {
 		return;
@@ -38,17 +33,17 @@ static void dbmapSilence(CFMutableDictionaryRef query, int allowUI) {
 	SecKeychainSetUserInteractionAllowed(FALSE);
 }
 
-// dbmapRestore puts the process switch back, because the next call may be one a
-// human is watching.
+// dbmapRestore puts the process switch back for the next call, which may be one
+// a human is watching.
 static void dbmapRestore(int allowUI) {
 	if (!allowUI) {
 		SecKeychainSetUserInteractionAllowed(TRUE);
 	}
 }
 
-// query builds the dictionary that identifies one dbmap item: a generic
-// password filed under our service and the caller's account. Synchronizable is
-// pinned false so a database password never leaves the machine for iCloud.
+// dbmapQuery identifies one dbmap item: a generic password under our service
+// and the caller's account. Synchronizable is pinned false so a database
+// password never leaves the machine for iCloud.
 static CFDictionaryRef dbmapQuery(const char *service, const char *account) {
 	CFStringRef svc = CFStringCreateWithCString(NULL, service, kCFStringEncodingUTF8);
 	CFStringRef acct = CFStringCreateWithCString(NULL, account, kCFStringEncodingUTF8);
@@ -65,8 +60,8 @@ static CFDictionaryRef dbmapQuery(const char *service, const char *account) {
 	return query;
 }
 
-// dbmapSet adds the item, or replaces the value of one that already exists, so
-// a repeated Set is idempotent rather than a duplicate-item failure.
+// dbmapSet adds the item, or replaces an existing one's value, so a repeated
+// Set is idempotent rather than a duplicate-item failure.
 static OSStatus dbmapSet(const char *service, const char *account,
                          const void *secret, int length, int allowUI) {
 	CFDictionaryRef query = dbmapQuery(service, account);
@@ -80,8 +75,8 @@ static OSStatus dbmapSet(const char *service, const char *account,
 	CFRelease(add);
 
 	if (status == errSecDuplicateItem) {
-		// Replacing the value of an item an earlier build stored is a write the
-		// keychain asks about, so this query is silenced too.
+		// Replacing an item an earlier build stored is a write the keychain
+		// asks about, so this query is silenced too.
 		CFMutableDictionaryRef where = CFDictionaryCreateMutableCopy(NULL, 0, query);
 		dbmapSilence(where, allowUI);
 		CFMutableDictionaryRef update = CFDictionaryCreateMutable(NULL, 0,
@@ -154,7 +149,7 @@ import (
 )
 
 // The OSStatus codes dbmap names. They are Go constants because cgo cannot be
-// used from a _test.go file, and the table below is worth a test of its own.
+// used from a _test.go file, and the tables below are worth testing.
 const (
 	statusNotFound      = int32(C.errSecItemNotFound)
 	statusAuthFailed    = int32(C.errSecAuthFailed)
@@ -165,13 +160,10 @@ const (
 	statusAllocate      = int32(C.errSecAllocate)
 )
 
-// sentinels names the OSStatus codes the store above reasons about rather than
-// only reports: the item is absent, or the keychain would hand it over only
-// after the user answered something. The whole authorization family maps to one
-// sentinel because one remedy answers all of it - the login keychain reports a
-// refused dialog as errSecAuthFailed and the data protection keychain as
-// errSecInteractionNotAllowed, and a dismissed dialog leaves the user in the
-// same place as a refused one.
+// sentinels names the OSStatus codes the store above reasons about: the item is
+// absent, or the keychain would release it only after the user answered
+// something. The whole authorization family maps to one sentinel because one
+// remedy answers all of it, however the refusal was spelled.
 var sentinels = map[int32]error{
 	statusNotFound:      errMissing,
 	statusAuthFailed:    errBlocked,
@@ -179,21 +171,19 @@ var sentinels = map[int32]error{
 	statusCanceled:      errBlocked,
 }
 
-// statuses names the remaining OSStatus codes dbmap has words for. It is a
-// table so a new code is a new row; anything not listed still fails, because an
-// unrecognised refusal from the keychain is a refusal, and dbmap never answers
-// one by writing the secret somewhere weaker.
+// statuses names the remaining OSStatus codes dbmap has words for. Anything not
+// listed still fails: an unrecognised refusal is a refusal, and dbmap never
+// answers one by writing the secret somewhere weaker.
 var statuses = map[int32]string{
 	statusNotAvailable: "no keychain is available",
 	statusDuplicate:    "the item already exists",
 	statusAllocate:     "the keychain could not allocate memory",
 }
 
-// itemGet reads one item through the Security framework. Because dbmap calls it
-// in its own process, the item's access control names this binary rather than a
-// command line tool it shelled out to. That identity changes with every build,
-// so allow decides whether the keychain may ask the user about the difference
-// or must refuse the read instead.
+// itemGet reads one item through the Security framework. The item's access
+// control names this binary, and that identity changes with every build, so
+// allow decides whether the keychain may ask about the difference or must
+// refuse the read.
 func itemGet(service, account string, allow ui) (string, error) {
 	cService, cAccount, release := strings2(service, account)
 	defer release()
@@ -234,8 +224,8 @@ func itemDelete(service, account string, allow ui) error {
 	return nil
 }
 
-// statusError translates an OSStatus. A code the store above acts on keeps its
-// sentinel, wrapped so the number survives into the message.
+// statusError translates an OSStatus, wrapping a sentinel so the number
+// survives into the message.
 func statusError(code int32) error {
 	if sentinel, ok := sentinels[code]; ok {
 		return fmt.Errorf("%w (OSStatus %d)", sentinel, code)
@@ -246,8 +236,7 @@ func statusError(code int32) error {
 	return fmt.Errorf("the keychain refused the request (OSStatus %d)", code)
 }
 
-// flag converts the decision to the C int the Security calls take, because cgo
-// will not widen a Go bool for us.
+// flag converts the decision to a C int, which cgo will not widen a bool into.
 func flag(allow ui) C.int {
 	if allow {
 		return 1
@@ -255,8 +244,7 @@ func flag(allow ui) C.int {
 	return 0
 }
 
-// strings2 converts both C strings at once, because every call needs the same
-// pair and the same freeing.
+// strings2 converts both C strings at once: every call needs the same pair.
 func strings2(a, b string) (*C.char, *C.char, func()) {
 	first, second := C.CString(a), C.CString(b)
 	return first, second, func() {

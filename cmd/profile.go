@@ -8,8 +8,8 @@ import (
 	"github.com/branow/dbmap/internal/output"
 )
 
-// newProfile builds the profile namespace. A profile binds one connection to
-// one backend; creating it does not make it current, switching does.
+// newProfile builds the profile namespace. Creating a profile does not make it
+// current; switching does.
 func newProfile(f *cmdutil.Factory) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "profile",

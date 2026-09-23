@@ -1,16 +1,10 @@
 // Package engine is the boundary between the engine-agnostic pipeline above it
-// and one database's catalog below. Everything above this line speaks
-// catalog.Object and catalog.Structure; only what is inside an implementation
-// knows a type code or a system view.
+// and one database's catalog below.
 //
-// The real deliverable here is the safety contract, not the interface. A
-// previous attempt at this work took a SQL Server instance down — not with a
-// slow query, but by starving the operating system of memory on a box
-// configured with 119 GB of max server memory out of 125 GB physical. So every
-// statement this tool sends must be provably read-only and must carry its
-// engine's resource guard, and both rules are enforced centrally in Query
-// rather than at the call sites that build SQL. A rule applied per call site is
-// a rule the next call site can forget.
+// Every statement must be provably read-only and carry its engine's resource
+// guard: an earlier tool starved a live SQL Server of memory. Both rules are
+// enforced centrally in Query, because a rule applied per call site is a rule
+// the next call site can forget.
 package engine
 
 import (
@@ -29,7 +23,7 @@ type Engine interface {
 
 	// Manifest lists every in-scope object with the cheap facts the planner
 	// versions against. Row counts and sizes come from stored catalog totals,
-	// never from a scan.
+	// never from a scan, which would cost the server a full read.
 	Manifest(ctx context.Context, conn Conn) ([]catalog.Object, error)
 
 	// Structure fetches columns, keys, indexes, parameters and synonym targets
@@ -40,16 +34,14 @@ type Engine interface {
 	// batched. Keys are catalog.Object.Key values; a key whose object has no
 	// body is simply absent from the result.
 	//
-	// A body comes back as a redact.Body, which only the redactor can produce.
-	// Bodies are redacted ON ARRIVAL, and this is where they arrive — so that
-	// "a secret in the schema never becomes a secret on disk" is a property of
-	// the types rather than a step someone must remember. The cache demands the
-	// same type at the other end, and the two now agree by construction.
+	// The result is redact.Body, which only the redactor can produce, so
+	// "a secret in the schema never reaches disk" holds by construction rather
+	// than by everyone remembering to redact.
 	Modules(ctx context.Context, conn Conn, keys []string) (map[string]redact.Body, error)
 
-	// Sample reads the first n rows of one table for the describer. The caller
-	// has already chosen the projection, because which columns are safe to read
-	// is a PII rule and PII rules live above the engine boundary.
+	// Sample reads the first n rows of one table. The caller chooses the
+	// projection, because which columns are safe to read is a PII rule and PII
+	// rules live above the engine boundary.
 	Sample(ctx context.Context, conn Conn, table Table, n int) (catalog.Sample, error)
 
 	// Health reports whether the server has room for the next batch. An
@@ -60,27 +52,24 @@ type Engine interface {
 	Quote(identifier string) string
 }
 
-// Table names one table to sample and the columns the caller's projection
-// planner chose for it. The engine adds the row cap and the per-cell cap; it
-// never widens the projection.
+// Table names one table to sample and the columns chosen for it. The engine
+// adds the row cap and the per-cell cap; it never widens the projection.
 type Table struct {
 	Schema string
 	Name   string
-	// Columns is the projection, already filtered. An empty projection means
-	// the table is not worth reading, and the engine opens no query for it.
+	// Columns is the projection, already filtered. Empty means the engine opens
+	// no query for this table at all.
 	Columns []string
 }
 
 // Key is the name the pipeline indexes this table by.
 func (t Table) Key() string { return t.Schema + "." + t.Name }
 
-// Conn is the seam between an engine and a live pooled connection. It is an
-// interface so a test can drive an engine with no database, and so the ODBC
-// escape hatch recorded in the blueprint can be added without an engine
-// noticing.
+// Conn is the seam between an engine and a live pooled connection, an interface
+// so a test can drive an engine with no database.
 //
-// An implementation runs what it is handed. It does not inspect, rewrite or
-// re-check the statement: Query has already proved it read-only and guarded it.
+// An implementation runs what it is handed and does not re-check it: Query has
+// already proved the statement read-only and guarded it.
 type Conn interface {
 	// Query runs one statement inside the session the guard asked for.
 	Query(ctx context.Context, session Session, statement string, args ...any) (Rows, error)
@@ -95,18 +84,17 @@ type Rows interface {
 	Close() error
 }
 
-// Session is the engine-enforced half of a guard: what the query path arranges
-// around every statement, rather than what it appends to one. A regex over SQL
-// is a guess about what a statement will do; a read-only transaction is a
-// promise the server itself keeps.
+// Session is what the query path arranges around a statement rather than
+// appends to it: the gate's regex is a guess about what SQL will do, while a
+// read-only transaction is a promise the server itself keeps.
 type Session struct {
 	// ReadOnly asks the driver for a read-only transaction. SQL Server has no
 	// such transaction mode and buys the same guarantee with a read-only
 	// connection intent, so its guard leaves this false.
 	ReadOnly bool
-	// Set are session-local statements run inside that transaction before the
-	// statement itself. They are the engine's own, never user input, and are
-	// not subject to the read-only gate — a SET is not a read.
+	// Set are session-local statements run before the statement itself. They are
+	// the engine's own, never user input, and bypass the read-only gate because
+	// a SET is not a read.
 	Set []string
 }
 

@@ -29,8 +29,7 @@ func (c *Config) Profile(name string) (Profile, error) {
 	return entry, nil
 }
 
-// SetConnection defines or redefines a connection. Defining never activates:
-// the current profile is untouched, by design.
+// SetConnection defines or redefines a connection; defining never activates it.
 func (c *Config) SetConnection(name string, entry Connection) error {
 	if err := validateConnection(name, entry); err != nil {
 		return err
@@ -50,8 +49,8 @@ func (c *Config) SetBackend(name string, entry Backend) error {
 	return nil
 }
 
-// SetProfile defines or redefines a profile. It must bind names that already
-// exist, and it does not become current.
+// SetProfile defines or redefines a profile. It must bind names that exist,
+// and it does not become current.
 func (c *Config) SetProfile(name string, entry Profile) error {
 	if err := validateName(KindProfile, name); err != nil {
 		return err
@@ -104,8 +103,7 @@ func (c *Config) RemoveProfile(name string) error {
 	return nil
 }
 
-// Switch makes a profile current. It is the only operation that changes what is
-// active, which is why `add` and `create` never do.
+// Switch makes a profile current. It is the only operation that does.
 func (c *Config) Switch(name string) error {
 	if _, err := c.Profile(name); err != nil {
 		return err

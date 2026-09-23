@@ -10,9 +10,9 @@ import (
 
 const tab = "\t"
 
-// breakers are the characters that would end a cell or a row early. A
-// description written by a model can contain any of them, so every cell passes
-// through here and a tab or a newline can never break the file's shape.
+// breakers are the characters that would end a cell or row early. A
+// model-written description can contain any of them, so every cell passes
+// through here.
 var breakers = strings.NewReplacer("\t", " ", "\n", " ", "\r", " ")
 
 func clean(value string) string { return strings.TrimSpace(breakers.Replace(value)) }

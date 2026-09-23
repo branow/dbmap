@@ -6,20 +6,16 @@ import (
 	"github.com/branow/dbmap/internal/catalog"
 )
 
-// Code is a pg_catalog kind code, prefixed by the catalog it came from.
-// Postgres spells a partitioned table and a stored procedure with the same
-// letter — 'p' in pg_class.relkind and in pg_proc.prokind — so the query tags
-// each code with its origin and the table below stays a lookup rather than a
-// lookup plus a caveat.
+// Code is a pg_catalog kind code, prefixed by the catalog it came from:
+// relkind and prokind both spell a code 'p', so without the tag the table below
+// would need a caveat.
 type Code string
 
-// Codes is the kind table: the one place a Postgres catalog code becomes a
-// catalog kind.
+// Codes is the one place a Postgres catalog code becomes a catalog kind.
 //
-// Triggers are deliberately absent, exactly as on SQL Server: the parent
-// relation records a trigger count and no trigger is ever described. Aggregate
-// and window functions are absent too — pg_get_functiondef cannot render them,
-// and a reader learns nothing from a name the catalog cannot explain.
+// Triggers are absent as on SQL Server: the parent records a count instead.
+// Aggregate and window functions are absent because pg_get_functiondef cannot
+// render them, and a name with no body teaches a reader nothing.
 var Codes = []struct {
 	Code Code
 	Kind catalog.Kind
@@ -35,7 +31,7 @@ var Codes = []struct {
 }
 
 // RelKinds are the pg_class relkind codes the index covers, for an IN
-// predicate. Derived from the table above so the two cannot drift.
+// predicate. Derived from Codes so the two cannot drift.
 func RelKinds() string { return codesOf("rel:") }
 
 // ProKinds are the pg_proc prokind codes the index covers.
@@ -83,12 +79,11 @@ func schemaScope(column string) string {
 		"  AND " + column + " NOT LIKE 'pg\\_toast\\_temp\\_%'"
 }
 
-// routineCTE names one row per routine NAME, not per overload. Postgres allows
-// several functions to share a name, and the index is keyed by name, so the
-// lowest oid stands for the group. Every routine query starts from this so the
-// manifest, the parameters and the bodies all agree on which one that is.
-//
-// The cast through bigint is not decoration: there is no min() over oid.
+// routineCTE names one row per routine name, not per overload: Postgres lets
+// functions share a name and the index is keyed by name, so the lowest oid
+// stands for the group and every routine query starts here so the manifest,
+// parameters and bodies agree on which one that is. The cast through bigint is
+// load-bearing — there is no min() over oid.
 func routineCTE() string {
 	return `WITH routine AS (
   SELECT n.nspname AS schema, p.proname AS name, MIN(p.oid::bigint)::oid AS oid

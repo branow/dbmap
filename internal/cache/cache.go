@@ -1,22 +1,15 @@
-// Package cache is the resumable on-disk fetch cache: the three artifacts the
-// fetch stage produces — manifest, structure and module bodies — stored per
-// environment and database so a killed run restarts and refetches nothing.
+// Package cache is the resumable on-disk fetch cache: manifest, structure and
+// module bodies, stored per environment and database so a killed run restarts
+// and refetches nothing.
 //
-// Two properties make that true rather than hopeful:
-//
-// Entries are keyed by object AND by the engine's modify signal. A hit is only
-// a hit when the signal proves the object untouched, so a changed object is a
-// miss by construction and an engine that supplies no signal (Postgres has no
-// modify_date) always refetches. No stage anywhere names an engine to get that.
-//
-// Every write is atomic and every read is checksummed. A killed write leaves a
-// temporary file no read path opens; a truncated or tampered entry fails its
-// checksum and reads as a miss. Nothing here ever deserialises into garbage.
+// Entries are keyed by object AND by the engine's modify signal, so a changed
+// object is a miss by construction and an engine supplying no signal always
+// refetches — no stage names an engine to get that. Every write is atomic and
+// every read is checksummed, so a killed write leaves a file no read path opens
+// and a truncated entry reads as a miss rather than deserialising into garbage.
 //
 // Module bodies enter only through PutModule, which takes a redact.Body — a
-// type only the redactor can produce. The cache therefore cannot hold a raw
-// body even if a caller tries, which is the point: bodies are redacted on
-// arrival, before this package sees them.
+// type only the redactor can produce — so the cache cannot hold a raw body.
 package cache
 
 import (
@@ -28,24 +21,22 @@ import (
 	"github.com/branow/dbmap/internal/catalog"
 )
 
-// Store is a cache rooted at one directory. It owns no state beyond that path:
-// every operation reads or writes exactly one file, so two runs over different
-// databases never contend.
+// Store is a cache rooted at one directory. Every operation reads or writes
+// exactly one file, so two runs over different databases never contend.
 type Store struct {
 	root string
 }
 
-// New opens the cache under root. The directory is created lazily, on the first
-// write, so listing a cache that has never been built is not a side effect.
+// New opens the cache under root, creating the directory lazily on first write
+// so listing a cache that was never built is not a side effect.
 func New(root string) *Store { return &Store{root: root} }
 
 // Root is the directory this cache lives in.
 func (s *Store) Root() string { return s.root }
 
-// Scope narrows the cache to one database in one environment, which is the unit
-// everything else is keyed inside. Both names are encoded into single path
-// segments, so a name carrying a separator or a parent reference cannot reach
-// outside the cache root.
+// Scope narrows the cache to one database in one environment. Both names are
+// encoded into single path segments, so a name carrying a separator or a parent
+// reference cannot reach outside the cache root.
 func (s *Store) Scope(environment, database string) *Scope {
 	return &Scope{
 		dir:         filepath.Join(s.root, segment(environment), segment(database)),
@@ -77,9 +68,8 @@ type artifact struct {
 	proven bool
 }
 
-// The three artifacts the fetch stage produces. The manifest is the checkpoint
-// everything else resumes from, so it is one file and carries no signal: it is
-// the thing that tells a resumed run what the signals even are.
+// The three artifacts the fetch stage produces. The manifest carries no signal
+// because it is what tells a resumed run what the signals are.
 var (
 	manifestOf  = artifact{name: "manifest"}
 	structureOf = artifact{name: "structure", dir: "structure", proven: true}
@@ -94,10 +84,9 @@ func (s *Scope) path(a artifact, key string) string {
 	return filepath.Join(s.dir, a.dir, entry(key))
 }
 
-// load reads one entry and reports whether it is usable. Every reason it might
-// not be — absent, corrupt, written for another object, superseded by a newer
-// modify signal — collapses to the same miss, because the caller's answer to
-// all of them is to fetch.
+// load reads one entry and reports whether it is usable. Absent, corrupt,
+// written for another object or superseded all collapse to the same miss: the
+// caller's answer to every one of them is to fetch.
 func load[T any](s *Scope, a artifact, key string, signal catalog.Signal) (T, bool, error) {
 	var value T
 	found, ok, err := read(s.path(a, key))
@@ -132,17 +121,16 @@ func save[T any](s *Scope, a artifact, key string, signal catalog.Signal, value 
 	})
 }
 
-// entry is the file name for one object's entry. The escaped key keeps the file
-// readable for a human looking at the cache; the digest suffix keeps two keys
-// apart that a case-insensitive filesystem would otherwise fold together.
+// entry is the file name for one object's entry. The escaped key keeps it
+// human-readable; the digest suffix keeps apart two keys a case-insensitive
+// filesystem would otherwise fold together.
 func entry(key string) string {
 	return fmt.Sprintf("%s-%s.json", segment(key), checksum([]byte(key))[:8])
 }
 
 // segment encodes an arbitrary catalog name as exactly one path segment.
-// Anything outside a conservative alphabet is percent-escaped, and a leading
-// dot is escaped too, so neither a separator nor a parent reference survives
-// and no name can address a file outside the cache.
+// Anything outside a conservative alphabet is percent-escaped, a leading dot
+// included, so no name can address a file outside the cache.
 func segment(name string) string {
 	var out strings.Builder
 	for i := 0; i < len(name); i++ {

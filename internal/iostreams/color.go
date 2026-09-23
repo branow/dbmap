@@ -1,13 +1,13 @@
 package iostreams
 
-// Palette writes ANSI attributes, or nothing at all when color is off. Styles
-// are a table rather than one method per code, so adding a style is data.
+// Palette writes ANSI attributes, or nothing when color is off. The styles are
+// a table rather than one method per code, so adding one is data.
 type Palette struct{ enabled bool }
 
 // Style names one visual attribute.
 type Style string
 
-// The styles dbmap uses. Anything a command needs is listed here.
+// The styles dbmap uses.
 const (
 	Bold   Style = "bold"
 	Red    Style = "red"

@@ -11,7 +11,7 @@ import "os"
 // Engine names a supported database engine.
 type Engine string
 
-// The engines phase 1 ships.
+// The supported engines.
 const (
 	SQLServer Engine = "sqlserver"
 	Postgres  Engine = "postgres"
@@ -20,7 +20,7 @@ const (
 // Auth names how a connection authenticates.
 type Auth string
 
-// The authentication modes phase 1 ships.
+// The supported authentication modes.
 const (
 	SQLLogin Auth = "sqllogin"
 	Kerberos Auth = "kerberos"
@@ -30,7 +30,7 @@ const (
 // Provider names an llm backend implementation.
 type Provider string
 
-// The providers phase 1 ships.
+// The supported llm providers.
 const (
 	Anthropic  Provider = "anthropic"
 	OpenAI     Provider = "openai"
@@ -38,17 +38,17 @@ const (
 )
 
 // Fallback is the secret-storage policy: what happens when the OS keychain
-// cannot answer. Plaintext is opt-in and never reached by accident.
+// cannot answer.
 type Fallback string
 
 // The storage policies. Never is the default, so a transient keychain failure
-// can never persist a database password to disk.
+// can never persist a password to disk; plaintext is opt-in only.
 const (
 	Never     Fallback = "never"
 	Plaintext Fallback = "plaintext"
 )
 
-// Connection is one named database connection, non-secret fields only. The
+// Connection is one named database connection, non-secret fields only. Its
 // password, when the auth mode needs one, lives under the key db:<name>.
 type Connection struct {
 	Engine     Engine            `yaml:"engine"`
@@ -70,7 +70,7 @@ type Backend struct {
 }
 
 // Profile binds one connection to one backend and carries output preferences.
-// It selects; it never redefines what a connection or a backend is.
+// It selects; it never redefines either.
 type Profile struct {
 	Connection string `yaml:"connection"`
 	Backend    string `yaml:"backend"`
@@ -120,7 +120,7 @@ func (c *Config) Path() string { return c.path }
 func (c *Config) SetPath(p string) { c.path = p }
 
 // SetEnv replaces the environment lookup, so the precedence chain is testable
-// without mutating a process.
+// without mutating the process.
 func (c *Config) SetEnv(lookup func(string) string) { c.env = lookup }
 
 // lookup reads one DBMAP_* variable through the injected environment.

@@ -1,9 +1,6 @@
 // Command dbmap reads a database catalog and writes a compact index an agent
-// can read in one pass.
-//
-// This file is the only place in the program that ends the process, and it ends
-// it through cmdutil.ExitCode: every command returns a typed error, and the
-// error's type - never its text - decides the status a script sees.
+// can read in one pass. It is the only place that ends the process, always
+// through cmdutil.ExitCode: an error's type, never its text, picks the status.
 package main
 
 import (

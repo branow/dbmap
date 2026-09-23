@@ -11,14 +11,11 @@ const (
 	OpWrite Op = "write"
 )
 
-// StoreError reports a cache operation the filesystem refused: an unreadable
-// directory, a full disk, a permission the user does not have. Every part of
-// the context is a field, so a caller decides what to show and the message is
-// assembled only if something prints it.
+// StoreError reports a cache operation the filesystem refused. Every part of
+// the context is a field, so a caller decides what to show.
 //
-// A corrupt or half-written entry is deliberately NOT this error. It is a miss:
-// the cache exists to be refetched, and a run that stops because a stale file
-// went bad would defeat the point of having one.
+// A corrupt or half-written entry is deliberately NOT this error but a miss: a
+// run that stopped because a stale file went bad would defeat the cache.
 type StoreError struct {
 	Op       Op
 	Artifact string

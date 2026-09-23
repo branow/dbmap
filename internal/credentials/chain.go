@@ -8,8 +8,8 @@ import (
 // Policy decides what may hold a secret when the OS keychain cannot.
 type Policy string
 
-// The policies. Never is the default: a keychain failure is a hard error, not a
-// quiet write to disk, because a transient failure would otherwise persist a
+// The policies. Never is the default: a keychain failure is a hard error, never
+// a quiet write to disk, because a transient failure would otherwise persist a
 // database password permanently.
 const (
 	PolicyNever     Policy = "never"
@@ -27,16 +27,15 @@ type Options struct {
 	// Env reads the environment; nil means the process environment.
 	Env func(string) string
 	// Interactive says a human is watching a terminal and may answer the
-	// keychain's authorization dialog, which is true only when both streams are
-	// a terminal and --no-input was not given. The zero value is false, so a
-	// store nobody configured fails fast instead of blocking on a dialog that
-	// a script, a CI job or a background process would never show anyone.
+	// keychain's authorization dialog. The zero value is false, so a store
+	// nobody configured fails fast instead of hanging a script, a CI job or a
+	// background process on a dialog nobody can see.
 	Interactive bool
 }
 
 // chain is the assembled stack: the environment answers first so a headless run
-// needs no keychain, the keychain answers next, and the plaintext file
-// participates only when the policy opted in.
+// needs no keychain, then the keychain, then - only under the plaintext policy
+// - the file.
 type chain struct {
 	env      *Env
 	keychain *Keychain
@@ -63,9 +62,9 @@ func New(o Options) (Store, error) {
 	}
 }
 
-// Get asks the environment, then the keychain, then - only under the plaintext
-// policy - the file. A keychain that is present but empty still lets the file
-// answer, because that is where an opted-in user's secret was written.
+// Get asks the environment, then the keychain, then the file. A keychain that
+// is present but empty still lets the file answer, because that is where an
+// opted-in user's secret was written.
 func (c *chain) Get(key string) (Secret, error) {
 	if secret, err := c.env.Get(key); err == nil {
 		return secret, nil
@@ -81,8 +80,8 @@ func (c *chain) Get(key string) (Secret, error) {
 	if fileErr == nil {
 		return fromFile, nil
 	}
-	// Report the keychain problem, not the file miss: the keychain is the
-	// store the user expects to be answering.
+	// Report the keychain problem, not the file miss: the keychain is the store
+	// the user expects to be answering.
 	var missing *NotFoundError
 	if errors.As(err, &missing) {
 		return Secret{}, fileErr

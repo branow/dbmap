@@ -13,23 +13,19 @@ import (
 	"github.com/branow/dbmap/internal/catalog"
 )
 
-// The cache is the user's private working copy of their own schema. It holds no
-// credential, but it is nobody else's business either.
+// The cache is the user's private working copy of their own schema: no
+// credential in it, but nobody else's business either.
 const (
 	dirPerm  fs.FileMode = 0o700
 	filePerm fs.FileMode = 0o600
 )
 
-// tempPattern names the file an interrupted write leaves behind. It starts with
-// a dot and carries no .json suffix, so a crashed write can never be mistaken
-// for an entry: entries are read by their exact computed path and nothing else.
+// tempPattern names the file an interrupted write leaves behind, dotted and
+// without a .json suffix so it can never be mistaken for an entry.
 const tempPattern = ".partial-*"
 
-// envelope wraps every payload with what a read must check before it trusts the
-// bytes: which artifact wrote them, which object and which modify signal they
-// describe, and a checksum over the payload. A file failing any check is a
-// miss, never a value — that is the whole defence against deserialising garbage
-// left by a killed run.
+// envelope wraps every payload with what a read must check before trusting the
+// bytes. A file failing any check is a miss, never a value.
 type envelope struct {
 	Artifact string          `json:"artifact"`
 	Key      string          `json:"key,omitempty"`
@@ -38,9 +34,8 @@ type envelope struct {
 	Payload  json.RawMessage `json:"payload"`
 }
 
-// read loads one entry. A file that is absent, unparsable, or whose payload
-// does not match its checksum reports a miss with no error: all three mean the
-// same thing to a caller, which is that the value must be fetched again.
+// read loads one entry. Absent, unparsable or failing its checksum all report a
+// miss with no error: all three mean the value must be fetched again.
 func read(path string) (envelope, bool, error) {
 	data, err := os.ReadFile(path)
 	if errors.Is(err, fs.ErrNotExist) {
@@ -59,10 +54,8 @@ func read(path string) (envelope, bool, error) {
 	return entry, true, nil
 }
 
-// write stores one entry atomically: a fully written and flushed temporary file
-// is renamed over the target, so a reader sees either the previous entry or the
-// new one and never a prefix of either. A killed write leaves only the
-// temporary file, which no read path will ever open.
+// write stores one entry atomically: a flushed temporary file is renamed over
+// the target, so a reader sees the old entry or the new one, never a prefix.
 func write(path string, entry envelope) error {
 	fail := func(op Op, at string, err error) error {
 		return &StoreError{Op: op, Artifact: entry.Artifact, Key: entry.Key, Path: at, Err: err}
@@ -96,9 +89,8 @@ func write(path string, entry envelope) error {
 	return nil
 }
 
-// writeAll puts the bytes on disk and closes the file, flushing before it does,
-// so the rename that follows cannot publish an entry whose contents are still
-// in a buffer.
+// writeAll writes, flushes and closes, so the rename that follows cannot
+// publish an entry whose contents are still in a buffer.
 func writeAll(file *os.File, data []byte) error {
 	if _, err := file.Write(data); err != nil {
 		file.Close()
@@ -111,12 +103,10 @@ func writeAll(file *os.File, data []byte) error {
 	return file.Close()
 }
 
-// payloadSum digests a payload independently of how it is laid out on disk.
-// An entry is pretty-printed on the way out, which re-indents the payload
-// embedded in it, so digesting the bytes exactly as they appear would compare an
-// indented payload against the compact one the write digested and condemn every
-// entry as corrupt. Normalising first is what makes the checksum mean "these
-// bytes were altered" rather than "these bytes were reformatted".
+// payloadSum digests normalised JSON, not the on-disk bytes. Entries are
+// pretty-printed on the way out, so hashing the bytes as they appear compared an
+// indented payload against the compact one the write digested: every entry read
+// as corrupt and the cache never hit.
 func payloadSum(payload []byte) string {
 	var compact bytes.Buffer
 	if json.Compact(&compact, payload) != nil {

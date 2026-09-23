@@ -14,18 +14,11 @@ const manifestColumns = 6
 // manifestQuery lists every in-scope object with the cheap facts the planner
 // versions against.
 //
-// pg_class.reltuples is the planner's ESTIMATE, maintained by ANALYZE and
-// VACUUM. It is not exact and does not need to be: it decides sample depth and
-// nothing else, and the alternative — count(*) — reads every page of every
-// table, which is the query shape this whole tool is built to never send. A
-// table that has never been analysed reports -1, which GREATEST folds to 0.
-//
-// pg_total_relation_size reads stored page counts, including indexes and
-// TOAST, and is asked only of relations that have storage: a view has none and
-// older servers raise rather than answer.
-//
-// There is no modify signal to select. Postgres keeps none, so every object
-// here leaves with catalog.Signal absent by construction.
+// pg_class.reltuples is the planner's estimate, which is enough because it only
+// decides sample depth, and the exact alternative — count(*) — reads every page
+// of every table. A never-analysed table reports -1, which GREATEST folds to 0.
+// pg_total_relation_size reads stored page counts and is asked only of
+// relations that have storage, since older servers raise for a view.
 func manifestQuery() string {
 	return routineCTE() + `
 SELECT n.nspname, c.relname, 'rel:' || c.relkind::text,

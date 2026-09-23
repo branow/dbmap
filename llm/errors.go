@@ -7,12 +7,10 @@ import (
 )
 
 // Class is the failure classification every provider maps its native errors
-// onto. Retry and exit-code decisions read the class; string-matching a
-// provider's prose is not a decision procedure.
+// onto, so that retry and exit-code decisions never string-match prose.
 type Class int
 
-// The six classes. Their retry semantics live in the table below, not in the
-// call sites.
+// The six classes. Their retry semantics live in the table below.
 const (
 	// ClassAuth means credentials were rejected or absent.
 	ClassAuth Class = iota + 1
@@ -32,8 +30,7 @@ const (
 	ClassBadRequest
 )
 
-// The six sentinels, so callers can write errors.Is(err, llm.ErrRateLimited)
-// without reaching for the class value.
+// The six sentinels, so a caller can write errors.Is(err, llm.ErrRateLimited).
 var (
 	ErrAuth        = errors.New("llm: credentials rejected or absent")
 	ErrRateLimited = errors.New("llm: rate limited")
@@ -43,8 +40,8 @@ var (
 	ErrBadRequest  = errors.New("llm: request rejected")
 )
 
-// sentinels maps a class to its sentinel. It is the only place the two
-// vocabularies are tied together.
+// sentinels is the only place the class and sentinel vocabularies are tied
+// together.
 var sentinels = map[Class]error{
 	ClassAuth:        ErrAuth,
 	ClassRateLimited: ErrRateLimited,
@@ -97,8 +94,7 @@ type Error struct {
 	Err error
 }
 
-// Error renders the class and, when the provider said something useful, its
-// message. Provider, model and status stay on their fields.
+// Error renders the class and the provider's own message when there is one.
 func (e *Error) Error() string {
 	if e.Detail == "" {
 		return e.Class.String()
@@ -106,8 +102,8 @@ func (e *Error) Error() string {
 	return e.Class.String() + ": " + e.Detail
 }
 
-// Unwrap exposes the provider's own error to errors.Is and errors.As, so a
-// context cancellation stays visible through the classification.
+// Unwrap exposes the provider's error, so a context cancellation stays visible
+// through the classification.
 func (e *Error) Unwrap() error { return e.Err }
 
 // Is matches this error against its class sentinel.
@@ -133,8 +129,7 @@ func Retryable(err error) bool {
 	return ok && class.Retryable()
 }
 
-// statuses maps an HTTP status onto a class. Providers share it, because the
-// status vocabulary is the same on both API transports.
+// statuses maps an HTTP status onto a class, shared by both HTTP providers.
 var statuses = map[int]Class{
 	http.StatusBadRequest:            ClassBadRequest,
 	http.StatusUnauthorized:          ClassAuth,
@@ -158,9 +153,8 @@ func ClassifyStatus(status int) Class {
 	return ClassBadRequest
 }
 
-// ParseRetryAfter reads a Retry-After header value. It understands the
-// delay-seconds form only; the HTTP-date form is rare on these APIs and a wrong
-// parse would be worse than no hint at all.
+// ParseRetryAfter reads a Retry-After header value. Delay-seconds only: the
+// HTTP-date form is rare on these APIs and a wrong parse beats no hint.
 func ParseRetryAfter(value string) time.Duration {
 	if value == "" {
 		return 0

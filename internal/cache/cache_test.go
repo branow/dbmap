@@ -46,9 +46,8 @@ func TestManifestRoundTrip(t *testing.T) {
 	}
 }
 
-// A resumed run must refetch nothing it already holds at the same signal, and
-// must refetch everything whose signal moved. That pair is the whole point of
-// the cache.
+// A resumed run refetches nothing it holds at the same signal, and everything
+// whose signal moved.
 func TestResumeRefetchesOnlyWhatMoved(t *testing.T) {
 	s := scope(t)
 	structure := catalog.Structure{Columns: []catalog.Column{{Name: "OrderID", Type: "int"}}}
@@ -159,9 +158,8 @@ func TestBodyIsCappedAtBodyChars(t *testing.T) {
 	}
 }
 
-// Every way an entry can be unusable collapses to a miss, because the caller's
-// answer to all of them is the same: fetch it again. None may deserialize into
-// garbage a build would then write into the index.
+// Every way an entry can be unusable collapses to a miss: the caller's answer
+// to all of them is to fetch again, and none may deserialize into garbage.
 func TestCorruptEntriesReadAsMisses(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -311,12 +309,9 @@ func walk(t *testing.T, dir string, fn func(path string, data []byte)) {
 	}
 }
 
-// The bug this pins: an entry is pretty-printed on the way to disk, which
-// re-indents its payload. Digesting the payload as it appears rather than
-// normalised made every recomputed checksum differ from the stored one, so every
-// entry read as corrupt and the cache missed on every lookup — a resumable cache
-// that silently refetched the whole database on every run, with no error to show
-// for it.
+// The bug this pins: entries are pretty-printed on the way to disk, so hashing
+// the payload as it appears rather than normalised made every entry read as
+// corrupt and the cache miss on every lookup, with no error to show for it.
 func TestChecksumSurvivesReformatting(t *testing.T) {
 	payload := []byte(`{"columns":[{"name":"OrderID"}]}`)
 	indented := []byte("{\n  \"columns\": [\n    {\n      \"name\": \"OrderID\"\n    }\n  ]\n}")

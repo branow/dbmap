@@ -10,8 +10,8 @@ import (
 	"github.com/branow/dbmap/internal/output"
 )
 
-// checks holds the per-key validation a setting cannot do for itself: the
-// output format is owned by the renderer, not by the config file.
+// checks holds the validation a setting cannot do for itself: the output
+// format belongs to the renderer, not to the config file.
 var checks = map[string]func(string) error{
 	"output": func(v string) error {
 		_, err := output.ParseFormat(v)
@@ -19,8 +19,7 @@ var checks = map[string]func(string) error{
 	},
 }
 
-// newConfig exposes the scalar settings of config.yml. The keys are a table in
-// internal/config, so get, set and list can never disagree about what exists.
+// newConfig exposes the scalar settings of config.yml.
 func newConfig(f *cmdutil.Factory) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "config",

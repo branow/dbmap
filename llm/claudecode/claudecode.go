@@ -1,9 +1,8 @@
 // Package claudecode drives the headless `claude` binary as a pure model.
 //
-// It needs no API key: it uses the user's existing CLI session, which is the
-// entire reason it exists as a provider. The price is that usage comes back
-// mostly zeroed; this package reports what the CLI gives it and never
-// fabricates the rest.
+// It needs no API key, using the user's existing CLI session, which is the
+// entire reason it exists. The price is that usage comes back mostly zeroed,
+// and this package never fabricates the rest.
 package claudecode
 
 import (
@@ -49,8 +48,8 @@ type provider struct {
 
 func (p *provider) Name() string { return Name }
 
-// result is the shape of `claude --output-format json`. Fields the CLI omits
-// stay zero, which is exactly what Usage should then report.
+// result is the shape of `claude --output-format json`. A field the CLI omits
+// stays zero, which is what Usage should then report.
 type result struct {
 	Subtype          string          `json:"subtype"`
 	IsError          bool            `json:"is_error"`
@@ -64,9 +63,8 @@ type result struct {
 	} `json:"usage"`
 }
 
-// subtypes maps the CLI's own failure vocabulary onto the L1 classes. Anything
-// unlisted is treated as transient, because the alternative is string-matching
-// the CLI's prose.
+// subtypes maps the CLI's failure vocabulary onto llm classes. Anything
+// unlisted is transient, the alternative being to string-match CLI prose.
 var subtypes = map[string]llm.Class{
 	"error_max_turns":        llm.ClassRefused,
 	"error_during_execution": llm.ClassUnavailable,
@@ -78,12 +76,10 @@ func (p *provider) Complete(ctx context.Context, req llm.Request) (*llm.Response
 		model = p.cfg.Model
 	}
 
-	// The schema travels inline: `--json-schema` takes the schema itself, and
-	// hands back "not valid JSON" for a path. Verified against the CLI.
-	//
-	// --allowedTools "" keeps this a pure model call rather than an agent run.
-	// There is deliberately no --max-turns: structured output arrives as a tool
-	// call, so capping turns at one cuts the answer off and the run comes back
+	// The schema travels inline because --json-schema takes the schema itself
+	// and answers "not valid JSON" to a path. --allowedTools "" keeps this a
+	// pure model call. There is deliberately no --max-turns: structured output
+	// arrives as a tool call, so a cap cuts the answer off and the run returns
 	// error_max_turns with no structured_output at all.
 	args := []string{
 		"--print",
@@ -138,9 +134,8 @@ func (p *provider) Complete(ctx context.Context, req llm.Request) (*llm.Response
 	}, nil
 }
 
-// launchFault classifies a run that produced no parseable result. A binary that
-// is missing or not executable is a configuration fault and never retryable;
-// everything else is transient.
+// launchFault classifies a run that produced no parseable result. A missing or
+// unexecutable binary is a configuration fault; everything else is transient.
 func launchFault(err error, model, detail string) error {
 	class := llm.ClassUnavailable
 	if errors.Is(err, exec.ErrNotFound) || errors.Is(err, os.ErrNotExist) ||

@@ -7,10 +7,7 @@ import (
 	"github.com/branow/dbmap/internal/config"
 )
 
-// ProductionError refuses a connection the config marks as production. This
-// tool reads a catalog and samples rows; neither belongs against a production
-// instance, and the refusal is here rather than in a command so that no future
-// caller can reach a production database by taking a different route.
+// ProductionError refuses a connection the config marks as production.
 type ProductionError struct {
 	Name string
 }
@@ -20,12 +17,9 @@ func (e *ProductionError) Error() string {
 }
 
 // CredentialCacheError reports a Kerberos credential cache the pure-Go driver
-// cannot use. It is the failure everyone hits first on macOS, where the system
-// default cache type is API: — keychain-backed, readable by the system GSSAPI
-// and by nothing else — while gokrb5 reads FILE: caches only.
-//
-// The remedy is spelled out because the diagnosis is otherwise impossible from
-// the driver's own message, which reports only that no credentials were found.
+// cannot use. gokrb5 reads FILE: caches only, while the macOS default is API:,
+// which nothing but the system GSSAPI can open. The remedy is spelled out
+// because the driver reports only that no credentials were found.
 type CredentialCacheError struct {
 	// Path is the cache this connection would use.
 	Path string
@@ -46,8 +40,7 @@ func (e *CredentialCacheError) Error() string {
 	return fmt.Sprintf("%s; run %s and point the connection at that file", what, e.Remedy())
 }
 
-// Remedy is the command that fixes this, as a string a command can print on its
-// own line.
+// Remedy is the command that fixes this, as a line a command can print.
 func (e *CredentialCacheError) Remedy() string {
 	return fmt.Sprintf("kinit -c FILE:%s", e.Path)
 }
@@ -55,10 +48,8 @@ func (e *CredentialCacheError) Remedy() string {
 func (e *CredentialCacheError) Unwrap() error { return e.Err }
 
 // UnsupportedError reports a configuration this build cannot serve, named
-// precisely rather than surfaced as a generic authentication failure. A
-// cross-realm Kerberos setup fails with "Cannot generate SSPI context", which
-// says nothing about realms and sends the reader looking at the wrong thing;
-// naming it is the whole point of this type.
+// precisely rather than surfaced as the driver's generic authentication
+// failure, which sends the reader looking at the wrong thing.
 type UnsupportedError struct {
 	// Configuration is what is not supported, in the user's terms.
 	Configuration string
@@ -79,10 +70,9 @@ func (e *UnsupportedError) Error() string {
 	return strings.Join(parts, ": ")
 }
 
-// Stage names where in the Kerberos exchange something failed. It is a field
-// rather than a sentence because the three stages fail for entirely different
-// reasons: a missing realm file, an expired ticket, and a server that said no
-// are three problems with three fixes.
+// Stage names where in the Kerberos exchange something failed. A field rather
+// than a sentence, because a missing realm file, an expired ticket and a server
+// that said no are three problems with three fixes.
 type Stage string
 
 // The stages of the exchange, in the order they happen.
@@ -94,8 +84,7 @@ const (
 )
 
 // KerberosError reports a failure inside the GSSAPI exchange this package
-// performs itself, which is the Postgres path: pgx provides the hook and no
-// implementation, so the exchange is ours and so are its failures.
+// performs itself, which is the Postgres path.
 type KerberosError struct {
 	Stage Stage
 	// Reason is what went wrong, when this package knows better than the
@@ -120,9 +109,8 @@ func (e *KerberosError) Error() string {
 func (e *KerberosError) Unwrap() error { return e.Err }
 
 // ConnectError reports a connection that could not be opened or reached. It
-// carries the connection NAME and the engine, never the data source name: a
-// DSN holds the password, and an error is the most widely copied string a
-// program produces.
+// carries the connection name and engine, never the data source name, because
+// a DSN holds the password and errors are the most widely copied strings.
 type ConnectError struct {
 	Name   string
 	Engine config.Engine
@@ -139,23 +127,21 @@ func (e *ConnectError) Error() string {
 func (e *ConnectError) Unwrap() error { return e.Err }
 
 // CrossRealmError reports a Kerberos setup whose host lives in a realm other
-// than the ticket's.
-//
-// It is NOT a refusal. Measured against a live estate: gokrb5 cannot obtain a
-// cross-realm service ticket — it asks its own realm's KDC and is told the
-// principal is unknown — but it authenticates perfectly with a ticket already in
-// the cache. Both facts matter, because the driver's own message
-// ("KDC_ERR_S_PRINCIPAL_UNKNOWN: Server not found in Kerberos database") reads
-// like a wrong hostname and sends the reader looking at DNS.
-//
-// So the remedy is the two commands that put the ticket there, and neither asks
-// for a password. The realm must be spelled on the SPN: without it the tool
-// assumes the local realm and fails the same way.
+// than the ticket's. It is not a refusal: gokrb5 cannot obtain a cross-realm
+// service ticket but authenticates fine with one already in the cache, so the
+// remedy is the sequence that primes the cache, neither step asking for a
+// password. The realm must be spelled on the SPN or the local one is assumed.
+// The driver's own message reads like a wrong hostname and sends the reader
+// looking at DNS, which is why this is diagnosed rather than passed through.
 type CrossRealmError struct {
 	// Host is the server the ticket is needed for.
 	Host string
 	// Realm is the configured realm, when one was configured.
 	Realm string
+	// SPN is the service principal the remedy must name. It differs per engine
+	// — SQL Server registers MSSQLSvc/host:1433, PostgreSQL postgres/host — and
+	// a remedy naming the wrong one simply does not work.
+	SPN string
 }
 
 func (e *CrossRealmError) Error() string {
@@ -169,10 +155,10 @@ func (e *CrossRealmError) Remedy() string {
 	if realm == "" {
 		realm = "<HOST_REALM>"
 	}
-	return fmt.Sprintf("kgetcred \"MSSQLSvc/%s:1433@%s\"\n"+
+	return fmt.Sprintf("kgetcred %q\n"+
 		"kcc copy_cred_cache FILE:<path>\n"+
 		"then point the connection's krb5-credcachefile parameter at that file",
-		e.host(), realm)
+		e.spn()+"@"+realm)
 }
 
 func (e *CrossRealmError) host() string {
@@ -180,4 +166,11 @@ func (e *CrossRealmError) host() string {
 		return "<host>"
 	}
 	return e.Host
+}
+
+func (e *CrossRealmError) spn() string {
+	if e.SPN != "" {
+		return e.SPN
+	}
+	return "MSSQLSvc/" + e.host() + ":1433"
 }

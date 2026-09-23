@@ -203,8 +203,7 @@ func TestDescriberComposesTheModuleMiddleware(t *testing.T) {
 	}
 }
 
-// The summary is a struct, so the command's job is only to render it. A dry run
-// must not render numbers that would read as a completed build.
+// A dry run must not render numbers that would read as a completed build.
 func TestReportSaysWhenNothingWasBuilt(t *testing.T) {
 	h := newHarness(t)
 	if err := h.factory.Resolve(config.Overrides{Output: "json"}); err != nil {
@@ -257,7 +256,7 @@ func TestReportRendersTheWholeSummary(t *testing.T) {
 	}
 }
 
-// A found credential is named in the summary rather than left to a log line.
+// A found credential is named in the summary, not left to a log line.
 func TestReportNamesWhatWasRedacted(t *testing.T) {
 	h := newHarness(t)
 	if err := h.factory.Resolve(config.Overrides{}); err != nil {

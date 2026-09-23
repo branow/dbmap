@@ -9,34 +9,23 @@ import (
 	"github.com/branow/dbmap/internal/redact"
 )
 
-// CellChars caps one sampled cell. The describer needs the shape of a value,
-// not all of it, so one wide column cannot decide the size of a prompt.
-//
-// Both engines already cap in their own SQL, in their own units — SQL Server
-// counts nvarchar units, Postgres counts characters. The cap is restated here
-// in characters because the budget being protected is the describer's, which is
-// measured in characters whatever the server counted in.
+// CellChars caps one sampled cell, so one wide column cannot decide the size of
+// a prompt. Engines also cap in their own SQL in their own units; this cap is
+// restated in characters because the budget protected is the describer's.
 const CellChars = 200
 
 // Unbounded is the width a catalog renders for a column with no declared one.
 const Unbounded = "(max)"
 
-// Unsampleable is the type table: values that are opaque or meaningless to a
-// describer. Names are lower-cased engine type names and cover both engines'
-// spellings of one concept — SQL Server's `image` and Postgres's `bytea` are
-// the same decision.
+// Unsampleable lists the lower-cased engine type names whose values a describer
+// cannot read: binary payloads, spatial values and row versions, with both
+// engines' spellings of one concept side by side.
 //
-// It lists only what a describer cannot read: binary payloads, spatial values
-// and row versions. It deliberately does NOT list the long string types.
-// Unboundedness is already handled — every cell is capped at CellChars on the
-// way out — so excluding them buys nothing and costs the thing this tool exists
-// for. A measured run made that concrete: `text` was on this list, so sampling
-// a three-row status lookup projected its integer key and nothing else, and the
-// describer never saw Incomplete, Pending or CC Declined. Those values ARE the
-// value domain; capturing them without a DISTINCT scan is the whole argument
-// for sampling small tables first.
+// Long string types are deliberately absent. Width is already handled by the
+// CellChars cap, and excluding them once hid every lookup table's value domain:
+// a status table projected its integer key and nothing else.
 //
-// It is a table rather than a chain of comparisons so a new type is a new row.
+// A table rather than a chain of comparisons, so a new type is a new row.
 var Unsampleable = []string{
 	"image",
 	"varbinary",
@@ -67,10 +56,8 @@ func Sampleable(column catalog.Column) bool {
 }
 
 // Plan is what a table's sample is allowed to read, and what it is not.
-//
-// The withheld columns are carried rather than dropped: a describer shown four
-// of a table's nine columns and told nothing about the other five is being
-// misled about the table's shape, which is worse than seeing fewer values.
+// Withheld columns are carried rather than dropped, so the describer is not
+// misled about the table's shape.
 type Plan struct {
 	// Table is the engine's instruction: the table, and the projection already
 	// filtered. The engine adds the row cap and the per-cell cap and never
@@ -78,8 +65,7 @@ type Plan struct {
 	Table    engine.Table
 	Withheld []catalog.Withheld
 	// Complete marks a table the sample reads in full. Those are the value
-	// domains — 45 lookup tables in one measured database, every one under 25
-	// rows — and the reason the run is ordered the way it is.
+	// domains, and the reason the run is ordered the way it is.
 	Complete bool
 }
 
@@ -88,13 +74,9 @@ type Plan struct {
 func (p Plan) Empty() bool { return len(p.Table.Columns) == 0 }
 
 // Project splits a table's columns into the ones a sample may read and the ones
-// it withholds, with the reason for each.
-//
-// PII is decided on the column NAME, using the rules in redact, because a type
-// says nothing about who a value belongs to: an nvarchar(50) is a product code
-// or a surname and the catalog cannot tell you which. The name test comes
-// first, so a withheld person's column reads as personal data rather than as an
-// unsampleable type when it happens to be both.
+// it withholds, with the reason for each. PII is decided on the column NAME,
+// because a type cannot tell a product code from a surname; the name test comes
+// first so a column that is both reports as personal data.
 func Project(entry catalog.Entry) Plan {
 	plan := Plan{
 		Table:    engine.Table{Schema: entry.Object.Schema, Name: entry.Object.Name},

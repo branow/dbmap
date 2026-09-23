@@ -1,14 +1,10 @@
 // Package llm is a provider seam: one prompt plus one JSON schema in, one
-// structured answer out.
+// structured answer out. It is deliberately not an agent framework — no chat,
+// tool calling, streaming or conversation state.
 //
-// It is deliberately not an agent framework, not a chat abstraction, not tool
-// calling, not streaming and not conversation state. One request, one response.
-// Anything beyond that belongs to the caller.
-//
-// The layers are: this package (the contract), the provider packages under it
-// (anthropic, openai, claudecode), the middleware in this package that wraps a
-// [Client] and returns a [Client], and [Config] plus the constructor in
-// llm/provider that maps a config struct onto one of the providers.
+// The layers are this package (the contract), the provider packages under it,
+// the middleware here that wraps a [Client] and returns a [Client], and
+// [Config] plus llm/provider, which maps a config onto a provider.
 package llm
 
 import (
@@ -28,13 +24,10 @@ type Request struct {
 
 	// Schema is the JSON Schema the answer must satisfy. Required.
 	//
-	// Never name a field in this schema "description". A field called
-	// "description" whose schema text asks for "one sentence saying what this
-	// object does" gets filled with a description *of the field* rather than of
-	// the object, on every model measured, and better instruction-following
-	// makes it worse rather than better. Name the field for the thing being
-	// produced ("sentence") and tell the model to put the finished text there
-	// verbatim. See DESIGN.md, "Two hard-won prompt lessons".
+	// Never name an output field "description": every model measured fills it
+	// with a description OF THE FIELD rather than of the object, and better
+	// instruction-following makes it worse. Name the field for the thing
+	// produced ("sentence"). See DESIGN.md, "Two hard-won prompt lessons".
 	Schema json.RawMessage
 
 	// Model overrides the client's configured default when non-empty.
@@ -44,8 +37,8 @@ type Request struct {
 	MaxTokens int
 }
 
-// Response is one answer. The structured payload stays raw: the answer shape is
-// the caller's business, and this package never decodes it.
+// Response is one answer. The structured payload stays raw, because the answer
+// shape is the caller's business.
 type Response struct {
 	// Structured is the schema-constrained answer, exactly as the provider
 	// returned it.
@@ -62,8 +55,8 @@ type Response struct {
 	Usage Usage
 }
 
-// Usage is the token and money cost of a call. Fields a provider cannot report
-// stay zero; none of them is ever estimated.
+// Usage is the token and money cost of a call. A field a provider cannot report
+// stays zero and is never estimated.
 type Usage struct {
 	InputTokens     int
 	OutputTokens    int
@@ -83,8 +76,8 @@ func (u *Usage) Add(other Usage) {
 	u.Cost += other.Cost
 }
 
-// Client is the whole contract. Providers implement it; middleware wraps it and
-// returns it, so middleware composes in any order.
+// Client is the whole contract. Middleware both takes and returns one, so it
+// composes in any order.
 type Client interface {
 	// Complete answers one request. Every returned error is an [*Error].
 	Complete(ctx context.Context, req Request) (*Response, error)

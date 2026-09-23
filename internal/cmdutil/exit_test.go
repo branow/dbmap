@@ -160,10 +160,9 @@ func TestTheCauseDecidesNotTheWrapper(t *testing.T) {
 	}
 }
 
-// TestTheRemedySurvives: these two are the failures a macOS user hits first,
-// and each carries the one fact that makes it fixable - the kinit command, and
-// which stage of the exchange failed. main prints err.Error() as it stands, so
-// asserting on it here is asserting on what the user reads.
+// TestTheRemedySurvives: each of these carries the one fact that makes it
+// fixable. main prints err.Error() as it stands, so asserting on it here is
+// asserting on what the user reads.
 func TestTheRemedySurvives(t *testing.T) {
 	cache := &connect.CredentialCacheError{Path: "/tmp/krb5cc_501", Type: "API"}
 	if !strings.Contains(cache.Error(), "kinit -c FILE:/tmp/krb5cc_501") {
@@ -178,10 +177,9 @@ func TestTheRemedySurvives(t *testing.T) {
 	}
 }
 
-// TestEveryDocumentedCodeIsReachable is the guard against a code that is
-// documented and never produced, and against an error type added with no home:
-// a class that maps nowhere lands in the generic bucket, and the table below is
-// where a new type has to be listed for that not to happen silently.
+// TestEveryDocumentedCodeIsReachable guards against a code that is documented
+// and never produced, and against an error type with no home: one that maps
+// nowhere falls into the generic bucket silently.
 func TestEveryDocumentedCodeIsReachable(t *testing.T) {
 	reached := map[int]bool{
 		ExitOK:    ExitCode(nil) == ExitOK,

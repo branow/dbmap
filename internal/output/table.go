@@ -49,8 +49,8 @@ func (t *table) Note(text string) error {
 	return err
 }
 
-// cell flattens a value to one column. A nil is blank rather than "<nil>",
-// because a table is read by a person.
+// cell flattens a value to one column. A nil is blank rather than "<nil>": a
+// table is read by a person.
 func cell(v any) string {
 	switch value := v.(type) {
 	case nil:

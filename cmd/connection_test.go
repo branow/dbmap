@@ -147,8 +147,7 @@ func TestConnectionAddRejectsBadValues(t *testing.T) {
 	}
 }
 
-// TestProbeRunsBeforeAnythingIsStored is the verify-before-store seam M2 and M3
-// plug a real connection into: a refusal must leave no trace behind.
+// TestProbeRunsBeforeAnythingIsStored: a refusal must leave no trace behind.
 func TestProbeRunsBeforeAnythingIsStored(t *testing.T) {
 	refused := errors.New("login failed")
 	h := newHarness(t)
@@ -268,8 +267,8 @@ func TestAScriptedRunStatesEveryRequiredValue(t *testing.T) {
 }
 
 // TestConnectionAddTakesTheSecretFromTheEnvironment walks the remedy the
-// refusal advertises, end to end: no terminal, no stdin, only the variable the
-// message names. The secret must reach the store and never the config file.
+// refusal advertises: no terminal, no stdin, only the variable it names. The
+// secret must reach the store and never the config file.
 func TestConnectionAddTakesTheSecretFromTheEnvironment(t *testing.T) {
 	h := newHarness(t)
 	h.setenv(credentials.EnvName(credentials.DBKey("local")), password)
@@ -337,9 +336,9 @@ func TestKerberosStoresNothing(t *testing.T) {
 	}
 }
 
-// TestAnEnvironmentSecretSurvivesAnUnusableKeychain: the credential has a
-// durable source outside dbmap, so a keychain that cannot hold it is reported
-// rather than fatal. A secret with no second source still fails the command.
+// TestAnEnvironmentSecretSurvivesAnUnusableKeychain: the environment supplies
+// it again next run, so a keychain that cannot hold it only warns. A secret
+// with no second source still fails the command.
 func TestAnEnvironmentSecretSurvivesAnUnusableKeychain(t *testing.T) {
 	broken := &credentials.KeychainError{Op: "write", Key: credentials.DBKey("local"),
 		Err: errors.New("dbus is not running"), Remedy: "use the environment"}
@@ -381,9 +380,8 @@ func TestAnEnvironmentSecretSurvivesAnUnusableKeychain(t *testing.T) {
 }
 
 // TestAnUnreachableHostStoresWithAWarning is the other half of verify before
-// store: a definitive rejection refuses, but a dependency that could not be
-// reached is ambiguous - the machine may be off its network - so the entry is
-// recorded and the user is told it was not proved.
+// store: an unreachable dependency is ambiguous - the machine may be off its
+// network - so the entry is recorded and the user told it was not proved.
 func TestAnUnreachableHostStoresWithAWarning(t *testing.T) {
 	h := newHarness(t)
 	h.factory.Probes.Connection = func(context.Context, string, config.Connection,

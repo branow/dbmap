@@ -1,17 +1,11 @@
 // Package connect turns a stored connection record plus a secret resolved at
 // run time into a pooled handle an engine can read through.
 //
-// Two rules govern everything here.
-//
-// The data source name is assembled in memory and goes nowhere else. It carries
-// the password, so it is never logged, never returned in an error and never
-// written to disk — errors name the CONNECTION, which is what a user can act
-// on anyway.
-//
-// A connection marked production refuses to resolve, before a DSN is built and
-// before a driver is asked for anything. This tool reads catalogs and samples
-// rows; neither belongs against production, and the refusal lives here so that
-// no future caller reaches one by taking a different route.
+// Two rules govern everything here. The data source name carries the password,
+// so it is assembled in memory and goes nowhere else — errors name the
+// connection instead. And a connection marked production refuses to resolve
+// before a DSN is built, here rather than in a command, so no caller reaches
+// production by taking a different route.
 package connect
 
 import (
@@ -26,17 +20,14 @@ import (
 	"github.com/branow/dbmap/internal/engine/sqlserver"
 
 	// The drivers register themselves. go-mssqldb's krb5 authenticator is a
-	// separate package because it pulls in a Kerberos stack, and without this
-	// import authenticator=krb5 is an unknown provider at login time.
+	// separate import, without which authenticator=krb5 is an unknown provider.
 	_ "github.com/jackc/pgx/v5/stdlib"
 	_ "github.com/microsoft/go-mssqldb"
 	_ "github.com/microsoft/go-mssqldb/integratedauth/krb5"
 )
 
-// Pool limits. They are deliberately small. The pipeline reads one stage at a
-// time, so a wide pool buys nothing, and the instance this was measured against
-// is fragile enough that the number of connections a metadata tool can hold is
-// itself worth capping.
+// Pool limits, deliberately small: the pipeline reads one stage at a time, so a
+// wide pool buys nothing against a server worth being gentle with.
 const (
 	MaxOpen         = 4
 	MaxIdle         = 2
@@ -44,18 +35,16 @@ const (
 	MaxIdleLifetime = 5 * time.Minute
 )
 
-// dialect is one engine's plumbing: what registers it with database/sql, how its
-// data source name is built, and which Engine reads through it. It is a table
-// so that an engine is a row, and so the three facts about it cannot be
-// declared in three separate places and drift.
+// dialect is one engine's plumbing: what registers it with database/sql, how
+// its data source name is built, and which Engine reads through it. It is a
+// table so an engine is a row rather than three facts in three places.
 type dialect struct {
 	Name   string
 	DSN    func(config.Connection, string, environment) (dsn, error)
 	Engine func() engine.Engine
-	// Prepare arranges whatever process-global state this engine's driver needs
-	// before a connection of this shape can be opened. It runs at pool
-	// construction rather than at import, so nothing is seized from a program
-	// that merely links this package. A nil Prepare means there is none.
+	// Prepare arranges process-global driver state this engine needs. It runs at
+	// pool construction rather than at import, so nothing is seized from a
+	// program that merely links this package. Nil means there is none.
 	Prepare func(config.Connection, environment) error
 }
 
@@ -74,9 +63,8 @@ var drivers = map[config.Engine]dialect{
 }
 
 // preparePostgres registers this package's GSSAPI provider when the connection
-// authenticates with Kerberos. pgx ships the hook and no implementation, so
-// without this a Postgres server that demands GSSAPI answers with a message the
-// driver cannot read.
+// authenticates with Kerberos, because pgx ships the hook and no
+// implementation.
 func preparePostgres(cfg config.Connection, env environment) error {
 	if cfg.Auth != config.Kerberos {
 		return nil
@@ -89,8 +77,8 @@ func preparePostgres(cfg config.Connection, env environment) error {
 	return nil
 }
 
-// Engine returns the reader for one engine name, so a caller never has to
-// import a driver package to get one.
+// Engine returns the reader for one engine name, so a caller never imports a
+// driver package to get one.
 func Engine(name config.Engine) (engine.Engine, error) {
 	spec, ok := drivers[name]
 	if !ok {
@@ -108,15 +96,13 @@ type Pool struct {
 	name   string
 	engine config.Engine
 	secret string
-	// host is carried so a failure can be diagnosed in terms of the server it
-	// was aimed at: a Kerberos remedy has to name the host in its SPN.
+	// host is carried because a Kerberos remedy has to name the host in its SPN.
 	host string
 }
 
-// Open resolves a connection record into a pool. It performs no network I/O:
-// a pool is opened lazily by database/sql, so what this refuses, it refuses
-// before anything is dialled. Call Verify to prove the connection actually
-// works.
+// Open resolves a connection record into a pool. It performs no network I/O, so
+// whatever it refuses is refused before anything is dialled; call Verify to
+// prove the connection actually works.
 func Open(name string, cfg config.Connection, secret string) (*Pool, error) {
 	if cfg.Production {
 		return nil, &ProductionError{Name: name}
@@ -164,10 +150,9 @@ func (p *Pool) Conn() engine.Conn { return conn{db: p.db} }
 // Engine is the reader for this pool's engine.
 func (p *Pool) Engine() (engine.Engine, error) { return Engine(p.engine) }
 
-// Verify proves the connection works, which is the cheapest real call there is:
-// no catalog is read and no row is returned. A failure is diagnosed against the
-// signature table first, so a cross-realm Kerberos setup is named as one rather
-// than reported as a generic authentication failure.
+// Verify proves the connection works without reading a catalog or a row. A
+// failure goes through the signature table first, so a cross-realm Kerberos
+// setup is named as one rather than as a generic authentication failure.
 func (p *Pool) Verify(ctx context.Context) error {
 	if err := p.db.PingContext(ctx); err != nil {
 		return &ConnectError{
@@ -183,8 +168,8 @@ func (p *Pool) Verify(ctx context.Context) error {
 func (p *Pool) Close() error { return p.db.Close() }
 
 // scrub removes a secret from an error's text. A driver builds its messages
-// from the connection string it was handed, so the password can arrive back
-// inside a parse failure; this is the last place it can be taken out again.
+// from the connection string it was handed, so a password can arrive back
+// inside a parse failure, and this is the last place to take it out.
 func scrub(err error, secret string) error {
 	if err == nil || secret == "" {
 		return err
@@ -196,8 +181,8 @@ func scrub(err error, secret string) error {
 	return &scrubbed{text: strings.ReplaceAll(text, secret, "<redacted>"), err: err}
 }
 
-// scrubbed is an error whose text has had a secret taken out of it. The
-// original is kept for errors.Is and errors.As, and is never rendered.
+// scrubbed is an error whose text has had a secret taken out. The original is
+// kept for errors.Is and errors.As, and is never rendered.
 type scrubbed struct {
 	text string
 	err  error

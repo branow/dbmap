@@ -15,8 +15,7 @@ import (
 const Name = "config.yml"
 
 // dir is the per-user configuration directory, honouring the platform's own
-// convention: DBMAP_CONFIG wins, then XDG_CONFIG_HOME, then %AppData% on
-// Windows, then ~/.config.
+// convention: XDG_CONFIG_HOME, then %AppData% on Windows, then ~/.config.
 func dir() (string, error) {
 	if home := os.Getenv("XDG_CONFIG_HOME"); home != "" {
 		return filepath.Join(home, "dbmap"), nil
@@ -34,7 +33,7 @@ func dir() (string, error) {
 }
 
 // Path reports where config.yml lives for this user. DBMAP_CONFIG overrides it
-// outright, which is how a test or a CI job points at its own file.
+// outright, which is how a CI job points at its own file.
 func Path() (string, error) {
 	if p := os.Getenv("DBMAP_CONFIG"); p != "" {
 		return p, nil
@@ -56,8 +55,8 @@ func Load() (*Config, error) {
 	return LoadFrom(p)
 }
 
-// LoadFrom reads a config from an explicit path and validates it, because a
-// file on disk is external input and is checked once, here.
+// LoadFrom reads a config from an explicit path and validates it: a file on
+// disk is external input, checked once, here.
 func LoadFrom(path string) (*Config, error) {
 	c := NewAt(path)
 	raw, err := os.ReadFile(path)
@@ -77,8 +76,8 @@ func LoadFrom(path string) (*Config, error) {
 	return c, nil
 }
 
-// Save writes the file with owner-only permissions. The directory is created on
-// demand so `dbmap connection add` works on a machine that has never run it.
+// Save writes the file 0600, creating the directory on demand so the first
+// `dbmap connection add` on a machine works.
 func (c *Config) Save() error {
 	if c.path == "" {
 		return errors.New("config has no path")
@@ -100,8 +99,7 @@ func (c *Config) Save() error {
 	return nil
 }
 
-// normalise restores the invariants an unmarshalled struct loses: non-nil maps
-// and a working environment lookup.
+// normalise restores what unmarshalling loses: non-nil maps and an env lookup.
 func (c *Config) normalise() {
 	if c.Connections == nil {
 		c.Connections = map[string]Connection{}

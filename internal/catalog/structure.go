@@ -26,9 +26,9 @@ type Index struct {
 }
 
 // ForeignKey is one declared foreign key column. The index writes no foreign
-// key graph — two declared keys exist across three measured databases, so joins
-// here are naming convention — but a table's own keys ride along in its column
-// file and in its fingerprint.
+// key graph — declared keys are rare enough in practice that joins are naming
+// convention — but a table's own keys ride along in its column file and in its
+// fingerprint.
 type ForeignKey struct {
 	Column     string
 	References string
@@ -42,10 +42,8 @@ type Param struct {
 }
 
 // Structure is everything fetched about one object beyond its manifest row.
-// Which fields are populated follows from the kind: a table has columns, a
-// primary key and indexes; a module kind has a Definition; a synonym has a
-// Target. The zero Structure is a valid structure for an object nothing was
-// fetched for.
+// Which fields are populated follows from the kind. The zero Structure is valid
+// for an object nothing was fetched for.
 type Structure struct {
 	Columns     []Column
 	PrimaryKey  []string

@@ -1,20 +1,11 @@
 // Package describe turns a fetched object into one sentence, using a model with
 // no tools and everything it needs in the prompt.
 //
-// Two decisions in here were expensive to learn and are pinned by tests, not
-// only by comments. Read them before changing any wording.
-//
-//   - The output field is named `sentence`, never `description`. With a field
-//     called `description` whose schema text read like a noun phrase, every
-//     model filled it with a description OF THE FIELD — "One-sentence summary of
-//     what dbo.PromoGet does" — and the better a model followed instructions the
-//     more faithfully it did so.
-//   - The instruction is verb-first and carries worked good and bad examples.
-//     Listing requirements invites a small model to restate the list instead of
-//     answering it.
-//
-// The small model is sufficient here. That is measured, not assumed, and this
-// package does not default to a larger one.
+// Two decisions in here were expensive to learn and are pinned by tests as well
+// as comments; read them before changing any wording. The output field is named
+// `sentence`, never `description` (see sentenceField in describe.go). And the
+// instruction is verb-first with worked examples, because listing requirements
+// invites a small model to restate the list instead of answering it.
 package describe
 
 import (
@@ -24,21 +15,17 @@ import (
 	"github.com/branow/dbmap/internal/catalog"
 )
 
-// BodyChars caps a module body on its way into a prompt. It sends 90% of a
-// measured corpus whole; the cap exists only for the tail. The cache keeps more,
-// deliberately, so the stored copy is always the fuller one.
-//
-// A procedure is not summarisable from its opening — the writes are usually at
-// the bottom — so this is a cap, never a preview.
+// BodyChars caps a module body on its way into a prompt; the cache deliberately
+// keeps more, so the stored copy is always the fuller one. A procedure is not
+// summarisable from its opening, so this is a cap, never a preview.
 const BodyChars = 16000
 
-// Truncated marks a body the prompt could not carry whole, so the model can see
-// that it is reading a fragment rather than silently treating the tail as absent.
+// Truncated marks a body the prompt could not carry whole, so the model reads
+// it as a fragment rather than treating the missing tail as absent.
 const Truncated = "\n-- truncated"
 
 // verbFirst is the instruction that stops a small model restating the task.
-// Naming the failure mode is what fixed it; the good/bad examples per kind do
-// the rest.
+// Naming the failure mode is what fixed it; the per-kind examples do the rest.
 const verbFirst = "Answer in one sentence that starts with a verb, present tense, under 25 words.\n" +
 	"Do not restate this instruction, do not write the word summary or analysis, " +
 	"and do not repeat the object name."
@@ -114,8 +101,8 @@ var Prompts = map[catalog.Kind]Prompt{
 			"",
 			"Describe what this procedure does, naming the tables it touches.",
 			verbFirst,
-			`Good: "Inserts a promo code into dbo.PromoConfigurations, replacing any existing row for the same code."`,
-			`Good: "Reads order totals from dbo.Orders and dbo.OrderDetails for a single customer."`,
+			`Good: "Inserts a discount code into dbo.Discounts, replacing any existing row for the same code."`,
+			`Good: "Reads order totals from dbo.Orders and dbo.OrderLines for a single customer."`,
 			`Bad: "Stored procedure analysis: functionality, operation type, and data sources."`,
 		})
 	},
@@ -130,7 +117,7 @@ var Prompts = map[catalog.Kind]Prompt{
 			"",
 			"Describe what this function returns.",
 			verbFirst,
-			`Good: "Returns the commission run id covering a given period and period type."`,
+			`Good: "Returns the tax rate applying to a given region and effective date."`,
 		})
 	},
 }
@@ -160,11 +147,9 @@ func (e *UnpromptedKindError) Error() string {
 	return fmt.Sprintf("no prompt defined for kind %q", string(e.Kind))
 }
 
-// Body renders a definition for a prompt, capped and marked when it is cut.
-//
-// An absent body is stated rather than left blank: a model shown nothing where
-// a body should be will invent one, and an empty table is the canary for
-// exactly this class of prompt bug.
+// Body renders a definition for a prompt, capped and marked when it is cut. An
+// absent body is stated rather than left blank: a model shown nothing where a
+// body should be will invent one.
 func Body(definition string) string {
 	text := strings.TrimSpace(definition)
 	if text == "" {

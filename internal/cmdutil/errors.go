@@ -6,13 +6,11 @@ import (
 	"strings"
 )
 
-// ErrCancelled ends a command the user aborted. It is a sentinel because there
-// is nothing to say about a cancellation beyond the fact of it.
+// ErrCancelled ends a command the user aborted.
 var ErrCancelled = errors.New("cancelled")
 
 // ValidationError reports input the command refuses: a bad flag value, a
-// missing required value, a contradiction between two flags. The offending
-// field is a struct member, never text baked into a message.
+// missing required value, a contradiction between two flags.
 type ValidationError struct {
 	Field   string
 	Value   string
@@ -35,9 +33,8 @@ func (e *ValidationError) Error() string {
 	}
 }
 
-// NotConfiguredError reports a setting the command needs and the user has not
-// defined yet. Fix names the command that defines it, so the message is a way
-// forward rather than a complaint.
+// NotConfiguredError reports a setting the user has not defined yet. Fix names
+// the command that defines it.
 type NotConfiguredError struct {
 	What string
 	Fix  string
@@ -50,8 +47,8 @@ func (e *NotConfiguredError) Error() string {
 	return fmt.Sprintf("%s is not configured: %s", e.What, e.Fix)
 }
 
-// AuthError reports a credential that was presented and rejected. It is
-// distinct from a missing secret, which is a not-found condition.
+// AuthError reports a credential that was presented and rejected, as distinct
+// from a missing one, which is a not-found condition.
 type AuthError struct {
 	Subject string
 	Err     error
@@ -67,8 +64,7 @@ func (e *AuthError) Error() string {
 func (e *AuthError) Unwrap() error { return e.Err }
 
 // UnavailableError reports a dependency that could not be reached: a keychain,
-// a database, a model endpoint. The condition is environmental, not a mistake
-// the user made in what they typed.
+// a database, a model endpoint. The condition is environmental, not a mistake.
 type UnavailableError struct {
 	Subject string
 	Err     error

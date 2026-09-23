@@ -10,8 +10,7 @@ import (
 )
 
 // source is one metadata query and how to fold its rows into a structure.
-// Sources are data so that adding one is a row rather than a branch, and so a
-// test can assert what this engine would send with no server behind it.
+// Sources are data so adding one is a row rather than a branch.
 type source struct {
 	Name string
 	SQL  func() string
@@ -36,10 +35,8 @@ type indexRow struct {
 	column  string
 }
 
-// sources is the structure stage: five bounded queries, around 8,800 narrow
-// metadata rows across the three measured databases. Every one reads sys.*
-// catalog views only, so no user data page is touched and none of them needs a
-// memory grant worth the name.
+// sources is the structure stage: five bounded queries over sys.* catalog views
+// only, so no user data page is touched and no query needs a real memory grant.
 var sources = []source{
 	{
 		Name:  "columns",
@@ -155,9 +152,8 @@ var sized = []string{"varchar", "nvarchar", "char", "nchar", "varbinary", "binar
 // scaled are the types that carry a precision and a scale instead.
 var scaled = []string{"decimal", "numeric"}
 
-// width renders the width a reader needs — "(50)", "(18,2)", "(max)" — rather
-// than the raw catalog numbers. max_length is in BYTES, so a national type
-// halves it, and -1 is the (max) sentinel.
+// width renders the width a reader needs — "(50)", "(18,2)", "(max)". Note
+// max_length is in BYTES, so a national type halves it, and -1 means (max).
 func width(kind, maxLength, precision, scale string) string {
 	if contains(scaled, kind) {
 		return "(" + precision + "," + scale + ")"
@@ -187,9 +183,7 @@ func contains(list []string, value string) bool {
 	return false
 }
 
-// fold applies one source's rows to the structures under construction. It is
-// pure, so the whole of the structure stage's shaping is testable without a
-// connection.
+// fold applies one source's rows to the structures under construction.
 func fold(target map[string]*parsed, source source, rows [][]string) {
 	for _, raw := range rows {
 		if len(raw) < source.Width {

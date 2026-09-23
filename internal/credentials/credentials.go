@@ -8,8 +8,7 @@ import (
 	"strings"
 )
 
-// Key prefixes. The two namespaces are independent: one llm key is shared by
-// every connection, and one database password belongs to exactly one.
+// Key prefixes for the two independent namespaces.
 const (
 	dbPrefix  = "db:"
 	llmPrefix = "llm:"
@@ -24,9 +23,9 @@ func DBKey(name string) string { return dbPrefix + name }
 // LLMKey is the store key holding a backend's api key.
 func LLMKey(name string) string { return llmPrefix + name }
 
-// Secret is an opaque credential. Printing it, formatting it, marshalling it to
-// JSON or to YAML all yield a placeholder, so a secret cannot leak through an
-// accidental log line or a wrapped error. Reveal is the single way out.
+// Secret is an opaque credential: printing, formatting and marshalling all
+// yield a placeholder, so it cannot leak through a stray log line or a wrapped
+// error. Reveal is the single way out.
 type Secret struct{ value string }
 
 // NewSecret wraps a raw credential value.
@@ -45,16 +44,16 @@ func (s Secret) String() string { return redacted }
 // GoString hides the value from %#v.
 func (s Secret) GoString() string { return redacted }
 
-// MarshalJSON hides the value from any structure that gets serialised.
+// MarshalJSON hides the value from anything serialised.
 func (s Secret) MarshalJSON() ([]byte, error) { return json.Marshal(redacted) }
 
-// MarshalYAML hides the value from any structure written to config.yml.
+// MarshalYAML hides the value from anything written to config.yml.
 func (s Secret) MarshalYAML() (any, error) { return redacted, nil }
 
 const redacted = "[redacted]"
 
-// Store holds secrets by key. Every implementation is interchangeable, so a
-// test runs against an in-memory fake and CI against environment variables.
+// Store holds secrets by key. Implementations are interchangeable, so a test
+// runs against an in-memory fake and CI against environment variables.
 type Store interface {
 	// Get returns the secret for a key, or a NotFoundError.
 	Get(key string) (Secret, error)
@@ -65,8 +64,7 @@ type Store interface {
 }
 
 // EnvName maps a store key to the environment variable that can supply it:
-// db:main becomes DBMAP_SECRET_DB_MAIN. It is exported because a command that
-// cannot find a secret has to name the variable that would have carried it.
+// db:main becomes DBMAP_SECRET_DB_MAIN.
 func EnvName(key string) string {
 	clean := strings.Map(func(r rune) rune {
 		switch {

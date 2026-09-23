@@ -7,8 +7,8 @@ import (
 	"time"
 )
 
-// Retry defaults. A describe batch is worth a handful of attempts and about a
-// minute of waiting; past that the batch is better skipped than stalled.
+// Retry defaults: past a handful of attempts and about a minute of waiting, a
+// describe batch is better skipped than stalled.
 const (
 	DefaultAttempts   = 4
 	DefaultBackoff    = 500 * time.Millisecond
@@ -16,8 +16,8 @@ const (
 	DefaultElapsed    = 2 * time.Minute
 )
 
-// classAttempts tightens the attempt cap for classes where more attempts never
-// help. A schema failure gets exactly one retry, then the batch fails.
+// classAttempts tightens the cap where more attempts never help: a schema
+// failure sometimes lands on the second try and never on the third.
 var classAttempts = map[Class]int{
 	ClassSchema: 2,
 }
@@ -41,11 +41,11 @@ type RetryConfig struct {
 	Elapsed time.Duration
 
 	// Jitter returns a value in [0, d). nil means full jitter over a shared
-	// source. Tests inject a deterministic one to pin the bounds.
+	// source; a test injects a deterministic one.
 	Jitter func(d time.Duration) time.Duration
 
-	// Sleep waits, or returns the context's error. nil means a real timer.
-	// Tests inject a recorder to assert the delays without spending them.
+	// Sleep waits, or returns the context's error. nil means a real timer; a
+	// test injects a recorder to assert delays without spending them.
 	Sleep func(ctx context.Context, d time.Duration) error
 
 	// Now reads the clock for the elapsed cap. nil means time.Now.
@@ -113,8 +113,7 @@ func (r *retrier) Complete(ctx context.Context, req Request) (*Response, error) 
 	}
 }
 
-// attempts is the cap for a class: the configured cap, tightened by the
-// per-class table.
+// attempts is the configured cap, tightened by classAttempts.
 func (r *retrier) attempts(class Class) int {
 	capped, ok := classAttempts[class]
 	if ok && capped < r.cfg.Attempts {

@@ -1,8 +1,6 @@
-// Package provider maps an llm.Config onto one of the provider packages.
-//
-// It sits in its own package because the providers import llm for the contract,
-// so llm cannot import them back. Nothing registers itself globally: the table
-// below is the whole registry, and it is data.
+// Package provider maps an llm.Config onto one of the provider packages. It is
+// separate because the providers import llm, so llm cannot import them back.
+// Nothing registers globally: the table below is the whole registry.
 package provider
 
 import (
@@ -41,9 +39,7 @@ var constructors = map[string]func(llm.Config) (llm.Client, error){
 	},
 }
 
-// New builds the client a config names. An unknown provider is a bad request:
-// the host application validated its own config file, and this is the one
-// boundary check left.
+// New builds the client a config names.
 func New(cfg llm.Config) (llm.Client, error) {
 	construct, ok := constructors[cfg.Provider]
 	if !ok {
@@ -54,8 +50,7 @@ func New(cfg llm.Config) (llm.Client, error) {
 	return construct(cfg)
 }
 
-// Names lists the supported providers, sorted, for a host application's help
-// text and validation messages.
+// Names lists the supported providers, sorted, for help text and validation.
 func Names() []string {
 	names := make([]string, 0, len(constructors))
 	for name := range constructors {

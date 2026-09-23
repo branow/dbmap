@@ -2,8 +2,8 @@ package llm
 
 import "context"
 
-// WithConcurrency bounds how many calls are in flight at once. A 100-object
-// describe run must not open 100 sockets, and providers rate-limit on
+// WithConcurrency bounds how many calls are in flight at once, because a large
+// describe run must not open a socket per object and providers rate-limit on
 // concurrency as well as on rate. n <= 0 leaves the client unwrapped.
 func WithConcurrency(next Client, n int) Client {
 	if n <= 0 {

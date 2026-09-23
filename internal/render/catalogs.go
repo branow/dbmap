@@ -12,17 +12,10 @@
 //	                               primary key and the indexes
 //
 // Every catalog carries the modify signal and the fingerprint beside the
-// description, so the next build reads its own staleness state straight out of
-// the files it wrote and there is no second file to drift out of step — and the
-// modify signal earns its place for a reader too, since a procedure untouched
-// since 2018 says something a description cannot. Nothing derived is stored: a
-// table's sample depth is min(rows, 25) and rows is already there.
-//
-// Columns get a file each because a reader needs all of them; procedures and
-// functions do not, because their parameters fit on one line and a body is not
-// something the index reproduces. There is no foreign key catalog: three
-// measured databases declare two foreign keys between them, so a join here is a
-// naming convention and the index does not pretend otherwise.
+// description, so the next build reads its staleness state straight out of the
+// files it wrote and no second file can drift out of step. Nothing derived is
+// stored. Only tables and views get a column file: a procedure's parameters fit
+// on one line, and the index does not reproduce a body.
 package render
 
 import (
@@ -114,8 +107,8 @@ func row(c Catalog, entry catalog.Entry) []string {
 	return append(cells, entry.Object.Modified.String(), entry.Fingerprint, entry.Description)
 }
 
-// rowsIndex is where a row count sits in a catalog's row, for the reader that
-// needs it back, or -1 for a catalog that stores none.
+// rowsIndex is where a row count sits in a catalog's row, or -1 for a catalog
+// that stores none.
 func rowsIndex(c Catalog) int {
 	for i, fact := range c.Facts {
 		if fact == "rows" {

@@ -13,19 +13,13 @@ import (
 )
 
 // WithCache serves repeated identical requests from disk, so a killed run
-// resumes free and tests are deterministic without a fake.
+// resumes free.
 //
-// Entries are content-addressed by sha256(provider|model|system|prompt|schema),
-// so a changed prompt simply misses and no invalidation is needed. Only the
-// response is stored: a prompt may carry sampled database rows, and those must
-// not be written to a cache directory.
-//
-// A hit replays the recorded [Usage] as well. Place [WithUsage] inside this
-// wrapper, not outside it, when the totals are meant to count money actually
-// spent.
-//
-// A cache that cannot be read or written is not an error: the call falls
-// through to the provider.
+// Entries are content-addressed, so a changed prompt simply misses and nothing
+// needs invalidating. Only the response is stored, because a prompt may carry
+// sampled database rows. A hit replays the recorded [Usage] too, so place
+// [WithUsage] inside this wrapper when the totals should count money actually
+// spent. An unreadable or unwritable cache falls through to the provider.
 func WithCache(next Client, dir string) Client {
 	if dir == "" {
 		return next
