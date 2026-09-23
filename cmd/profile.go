@@ -20,6 +20,7 @@ func newProfile(f *cmdutil.Factory) *cobra.Command {
 		newProfileList(f),
 		newProfileSwitch(f),
 		newProfileShow(f),
+		newProfileRemove(f),
 	)
 	return cmd
 }
@@ -139,6 +140,23 @@ func newProfileShow(f *cmdutil.Factory) *cobra.Command {
 				{Name: "model", Value: backend.Model},
 				{Name: "output", Value: string(f.Flags.Output)},
 			})
+		},
+	}
+}
+
+func newProfileRemove(f *cmdutil.Factory) *cobra.Command {
+	return &cobra.Command{
+		Use:   "remove <name>",
+		Short: "Remove a profile",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			if err := f.Config.RemoveProfile(args[0]); err != nil {
+				return err
+			}
+			if err := f.Config.Save(); err != nil {
+				return err
+			}
+			return f.Note("profile " + args[0] + " removed")
 		},
 	}
 }

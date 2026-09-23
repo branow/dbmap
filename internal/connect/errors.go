@@ -16,23 +16,34 @@ type CredentialCacheError struct {
 	// Type is the offending cache type ("API", "KEYRING", "KCM"), empty when the
 	// cache is simply missing.
 	Type string
-	Err  error
+	// Unconvertible marks a cache type this platform ships no tool to convert,
+	// which is the only case left that the user has to resolve by hand.
+	Unconvertible bool
+	Err           error
 }
 
 func (e *CredentialCacheError) Error() string {
-	var what string
-	if e.Type != "" {
-		what = fmt.Sprintf("the Kerberos credential cache is a %s: cache, "+
-			"which the pure-Go driver cannot read", e.Type)
-	} else {
-		what = fmt.Sprintf("the Kerberos credential cache %q cannot be read", e.Path)
+	if e.Unconvertible {
+		return fmt.Sprintf("the Kerberos credential cache is a %s: cache, which the "+
+			"driver cannot read and this platform ships no tool to convert; run %s",
+			e.Type, e.Remedy())
 	}
-	return fmt.Sprintf("%s; run %s and point the connection at that file", what, e.Remedy())
+	if e.Type != "" {
+		return fmt.Sprintf("the Kerberos credential cache (%s:) could not be converted "+
+			"into one the driver can read; run %s", e.Type, e.Remedy())
+	}
+	return fmt.Sprintf("no readable Kerberos ticket: %q cannot be read; run %s",
+		e.Path, e.Remedy())
 }
 
-// Remedy is the command that fixes this.
+// Remedy is the command that fixes this. Converting a cache type is dbmap's
+// job, so the only thing left to ask for is a ticket.
 func (e *CredentialCacheError) Remedy() string {
-	return fmt.Sprintf("kinit -c FILE:%s", e.Path)
+	if e.Unconvertible {
+		return fmt.Sprintf("kinit -c FILE:%s, then set the connection's %s parameter to it",
+			e.Path, CredCacheParam)
+	}
+	return "kinit"
 }
 
 func (e *CredentialCacheError) Unwrap() error { return e.Err }

@@ -197,7 +197,10 @@ dbmap backend add local-llm --provider openai --base-url http://127.0.0.1:11434/
 ```
 
 Supported engines are `postgres` and `sqlserver`; authentication is `scram`
-(PostgreSQL), `sqllogin` (SQL Server) or `kerberos` (both). Backends are
+(PostgreSQL), `sqllogin` (SQL Server) or `kerberos` (both). Kerberos needs no
+extra configuration — `dbmap` finds your existing tickets, and converts the
+credential cache itself when the driver cannot read the platform's own format.
+Run `kinit` if you have no ticket; that is the whole setup. Backends are
 `anthropic`, `openai` (any OpenAI-compatible endpoint) and `claudecode`, which
 shells out to the Claude Code CLI and needs no API key of its own.
 

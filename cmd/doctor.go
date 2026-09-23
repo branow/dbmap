@@ -246,8 +246,6 @@ func advise(f *cmdutil.Factory, err error) {
 	var cache *connect.CredentialCacheError
 	if errors.As(err, &cache) {
 		fmt.Fprintf(f.IO.ErrOut, "remedy: %s\n", cache.Remedy())
-		fmt.Fprintf(f.IO.ErrOut,
-			"then set the connection's %s parameter to that file\n", connect.CredCacheParam)
 		return
 	}
 	var cross *connect.CrossRealmError

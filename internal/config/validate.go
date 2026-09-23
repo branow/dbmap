@@ -87,19 +87,12 @@ func (c *Config) Validate() error {
 			return err
 		}
 	}
-	for entry, value := range c.Profiles {
+	// A profile pointing at an entry that no longer exists is not a reason to
+	// refuse the whole file: that would make one removal brick every command,
+	// including the ones that would repair it. A dangling binding fails when the
+	// profile is actually used, and nowhere else.
+	for entry := range c.Profiles {
 		if err := validateName(KindProfile, entry); err != nil {
-			return err
-		}
-		if _, err := c.Connection(value.Connection); err != nil {
-			return err
-		}
-		if _, err := c.Backend(value.Backend); err != nil {
-			return err
-		}
-	}
-	if c.CurrentProfile != "" {
-		if _, err := c.Profile(c.CurrentProfile); err != nil {
 			return err
 		}
 	}
