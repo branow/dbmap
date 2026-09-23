@@ -1,10 +1,10 @@
 // Package sqlserver reads a SQL Server catalog, owning the sys.objects type
 // codes, the excluded schemas and the shape of every query sent to SQL Server.
 //
-// Two rules shape every query, both from the same incident. Row counts and
-// sizes come from sys.dm_db_partition_stats, which reads stored page totals,
-// because COUNT(*) and sp_spaceused scan and a scan of a large table is an
-// outage. And every statement carries OPTION (MAXDOP 1, MAX_GRANT_PERCENT = 1):
+// Two rules shape every query. Row counts and sizes come from
+// sys.dm_db_partition_stats, which reads stored page totals, because COUNT(*)
+// and sp_spaceused scan, and scanning a large table can cost a server more than
+// it can spare. And every statement carries OPTION (MAXDOP 1, MAX_GRANT_PERCENT = 1):
 // the grant cap makes a hungry query spill to tempdb instead of taking RAM the
 // operating system needs, and MAXDOP 1 stops a parallel plan from multiplying
 // that footprint per thread.
