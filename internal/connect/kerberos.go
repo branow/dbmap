@@ -70,6 +70,23 @@ var signatures = []struct {
 		},
 	},
 	{
+		// A server that rejected the login has decided. Left unclassified this
+		// reads as "unavailable", and setup then stores a credential the server
+		// has already refused.
+		Name: "login-rejected",
+		Match: regexp.MustCompile(`(?i)password authentication failed|` +
+			`\blogin failed for user\b|SQLSTATE 28[0-9A-Z]{3}|` +
+			`authentication failed|\blogin failed\b`),
+		Error: func(string) error { return &RejectedError{Subject: "the login"} },
+	},
+	{
+		// Naming a database that is not there is a typo, not an outage.
+		Name: "no-such-database",
+		Match: regexp.MustCompile(`(?i)cannot open database|database ".*" does not exist|` +
+			`SQLSTATE 3D000`),
+		Error: func(string) error { return &RejectedError{Subject: "the database"} },
+	},
+	{
 		Name:  "no-ticket",
 		Match: regexp.MustCompile(`(?i)no credentials? cache|credentials cache file .* not found`),
 		Error: func(string) error {
