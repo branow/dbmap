@@ -78,7 +78,9 @@ func plural(n int, noun string) string {
 func assert(ctx context.Context, src Source, stage string) error {
 	health, err := src.Health(ctx, src.Conn())
 	if err != nil {
-		health = engine.Classify(nil)
+		// Still a halt, but with the reason the server actually gave: an
+		// unreadable reading is unknown, and unknown is never healthy.
+		return err
 	}
 	return engine.Assert(health, stage)
 }

@@ -48,6 +48,15 @@ func parseHealth(rows [][]string) *engine.Reading {
 func (e *Engine) Health(ctx context.Context, conn engine.Conn) (engine.Health, error) {
 	rows, err := e.query(ctx, conn, HealthQuery())
 	if err != nil {
+		// Two very different failures land here, and drivers dial lazily so the
+		// first read of a run is where a bad password or an unreachable host
+		// shows up. If the server answers a trivial query the health views are
+		// merely invisible to this account, which is unknown-not-healthy; if it
+		// does not, the connection itself failed and that error is the only
+		// useful thing to report.
+		if _, alive := e.query(ctx, conn, "SELECT 1"); alive != nil {
+			return engine.Classify(nil), err
+		}
 		return engine.Classify(nil), nil
 	}
 	return engine.Classify(parseHealth(rows)), nil

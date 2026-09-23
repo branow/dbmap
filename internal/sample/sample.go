@@ -100,7 +100,7 @@ func All(
 	for _, plan := range plans {
 		health, err := fetcher.Health(ctx, conn)
 		if err != nil {
-			health = engine.Classify(nil)
+			return samples, err
 		}
 		if err := engine.Assert(health, "sampling "+plan.Table.Key()); err != nil {
 			return samples, err
