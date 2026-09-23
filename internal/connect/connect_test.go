@@ -401,12 +401,15 @@ func TestCrossRealmIsNamedRatherThanAttempted(t *testing.T) {
 
 	_, err := sqlserverDSN(cfg, "", env)
 
-	var unsupported *UnsupportedError
-	if !errors.As(err, &unsupported) {
-		t.Fatalf("error is %T, want *UnsupportedError", err)
+	var cross *CrossRealmError
+	if !errors.As(err, &cross) {
+		t.Fatalf("error is %T, want *CrossRealmError", err)
 	}
-	if !strings.Contains(strings.ToLower(unsupported.Configuration), "cross-realm") {
-		t.Errorf("the error does not name cross-realm: %q", unsupported.Configuration)
+	if !strings.Contains(cross.Remedy(), "kgetcred") {
+		t.Errorf("the remedy does not name the priming command:\n%s", cross.Remedy())
+	}
+	if cross.Realm != "OTHER.LOCAL" {
+		t.Errorf("realm = %q, want the configured one so the SPN can carry it", cross.Realm)
 	}
 }
 
@@ -436,35 +439,51 @@ func TestARealmMatchingTheHostIsNotCrossRealm(t *testing.T) {
 // "Cannot generate SSPI context" says nothing about realms, which is exactly
 // why the diagnosis cannot be left to the reader.
 func TestDiagnoseNamesWhatTheDriverMessageDoesNot(t *testing.T) {
-	cases := []struct {
-		name string
-		err  error
-		want string
-	}{
-		{
-			name: "a cross-realm listener",
-			err:  errors.New("mssql: login error: Cannot generate SSPI context"),
-			want: "cross-realm",
-		},
-		{
-			// GSSAPI itself is served now — this package supplies pgx's
-			// provider — so an unknown method is one that is neither scram nor
-			// Kerberos, and saying so is the useful diagnosis.
-			name: "a postgres server demanding a method this build does not speak",
-			err:  errors.New("unknown authentication message: 9"),
-			want: "authentication method",
-		},
+	// GSSAPI itself is served now — this package supplies pgx's provider — so an
+	// unknown method is one that is neither scram nor Kerberos, and saying so is
+	// the useful diagnosis.
+	err := diagnose(errors.New("unknown authentication message: 9"), "db.example.internal")
+
+	var unsupported *UnsupportedError
+	if !errors.As(err, &unsupported) {
+		t.Fatalf("diagnose left the failure unnamed: %v", err)
+	}
+	if !strings.Contains(unsupported.Configuration, "authentication method") {
+		t.Errorf("configuration = %q", unsupported.Configuration)
+	}
+}
+
+// Cross-realm is a fixable condition, not a refusal. Measured: gokrb5 cannot
+// fetch a cross-realm service ticket but authenticates fine with one already
+// cached, so the diagnosis has to carry the two commands that put it there.
+// Neither the driver's "Cannot generate SSPI context" nor its
+// "KDC_ERR_S_PRINCIPAL_UNKNOWN" mentions realms or tickets; the second reads
+// like a wrong hostname and sends the reader looking at DNS.
+func TestCrossRealmIsDiagnosedWithThePrimingSequence(t *testing.T) {
+	messages := []string{
+		"mssql: login error: Cannot generate SSPI context",
+		"KDC_Error: TGS Exchange Error: KRB Error: (7) KDC_ERR_S_PRINCIPAL_UNKNOWN " +
+			"Server not found in Kerberos database",
 	}
 
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			var unsupported *UnsupportedError
-			if !errors.As(diagnose(c.err), &unsupported) {
-				t.Fatalf("diagnose left %v unnamed", c.err)
+	for _, message := range messages {
+		t.Run(message[:24], func(t *testing.T) {
+			err := diagnose(errors.New(message), "db.example.internal")
+
+			var cross *CrossRealmError
+			if !errors.As(err, &cross) {
+				t.Fatalf("error is %T, want *CrossRealmError", err)
 			}
-			if !strings.Contains(unsupported.Configuration, c.want) {
-				t.Errorf("configuration = %q, want it to name %q",
-					unsupported.Configuration, c.want)
+			remedy := cross.Remedy()
+			for _, want := range []string{"kgetcred", "kcc copy_cred_cache", "FILE:", "db.example.internal"} {
+				if !strings.Contains(remedy, want) {
+					t.Errorf("the remedy does not name %q:\n%s", want, remedy)
+				}
+			}
+			// Without the realm on the SPN the tool assumes the local one and
+			// fails identically, so the placeholder must be visible.
+			if !strings.Contains(remedy, "@") {
+				t.Errorf("the SPN in the remedy carries no realm:\n%s", remedy)
 			}
 		})
 	}
@@ -475,7 +494,8 @@ func TestDiagnoseNamesWhatTheDriverMessageDoesNot(t *testing.T) {
 // wrong: the connection was opened without its Kerberos preparation.
 func TestAnUnregisteredProviderIsNamedAsOurOwnMistake(t *testing.T) {
 	err := diagnose(errors.New(
-		"kerberos error: no GSSAPI provider registered, see https://example.invalid"))
+		"kerberos error: no GSSAPI provider registered, see https://example.invalid"),
+		"db.example.internal")
 
 	var kerberos *KerberosError
 	if !errors.As(err, &kerberos) {
@@ -491,10 +511,10 @@ func TestAnUnregisteredProviderIsNamedAsOurOwnMistake(t *testing.T) {
 func TestDiagnoseLeavesAnUnknownFailureAlone(t *testing.T) {
 	original := errors.New("dial tcp: i/o timeout")
 
-	if got := diagnose(original); got != original {
+	if got := diagnose(original, "db.example.internal"); got != original {
 		t.Errorf("diagnose rewrote an unrecognised failure: %v", got)
 	}
-	if diagnose(nil) != nil {
+	if diagnose(nil, "") != nil {
 		t.Error("diagnose invented an error")
 	}
 }
@@ -502,7 +522,7 @@ func TestDiagnoseLeavesAnUnknownFailureAlone(t *testing.T) {
 // A ticket that has expired reads as no cache at all, and the fix is the same
 // kinit.
 func TestAMissingTicketIsDiagnosedWithTheKinitRemedy(t *testing.T) {
-	err := diagnose(errors.New("krb5: no credentials cache found"))
+	err := diagnose(errors.New("krb5: no credentials cache found"), "db.example.internal")
 
 	var cache *CredentialCacheError
 	if !errors.As(err, &cache) {

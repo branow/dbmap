@@ -137,3 +137,47 @@ func (e *ConnectError) Error() string {
 }
 
 func (e *ConnectError) Unwrap() error { return e.Err }
+
+// CrossRealmError reports a Kerberos setup whose host lives in a realm other
+// than the ticket's.
+//
+// It is NOT a refusal. Measured against a live estate: gokrb5 cannot obtain a
+// cross-realm service ticket — it asks its own realm's KDC and is told the
+// principal is unknown — but it authenticates perfectly with a ticket already in
+// the cache. Both facts matter, because the driver's own message
+// ("KDC_ERR_S_PRINCIPAL_UNKNOWN: Server not found in Kerberos database") reads
+// like a wrong hostname and sends the reader looking at DNS.
+//
+// So the remedy is the two commands that put the ticket there, and neither asks
+// for a password. The realm must be spelled on the SPN: without it the tool
+// assumes the local realm and fails the same way.
+type CrossRealmError struct {
+	// Host is the server the ticket is needed for.
+	Host string
+	// Realm is the configured realm, when one was configured.
+	Realm string
+}
+
+func (e *CrossRealmError) Error() string {
+	return fmt.Sprintf("no Kerberos service ticket for %s, and the pure-Go driver "+
+		"cannot follow a realm referral to fetch one; prime the cache first", e.host())
+}
+
+// Remedy is the priming sequence, as lines a command can print verbatim.
+func (e *CrossRealmError) Remedy() string {
+	realm := e.Realm
+	if realm == "" {
+		realm = "<HOST_REALM>"
+	}
+	return fmt.Sprintf("kgetcred \"MSSQLSvc/%s:1433@%s\"\n"+
+		"kcc copy_cred_cache FILE:<path>\n"+
+		"then point the connection's krb5-credcachefile parameter at that file",
+		e.host(), realm)
+}
+
+func (e *CrossRealmError) host() string {
+	if e.Host == "" {
+		return "<host>"
+	}
+	return e.Host
+}

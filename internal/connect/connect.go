@@ -108,6 +108,9 @@ type Pool struct {
 	name   string
 	engine config.Engine
 	secret string
+	// host is carried so a failure can be diagnosed in terms of the server it
+	// was aimed at: a Kerberos remedy has to name the host in its SPN.
+	host string
 }
 
 // Open resolves a connection record into a pool. It performs no network I/O:
@@ -149,7 +152,7 @@ func Open(name string, cfg config.Connection, secret string) (*Pool, error) {
 	db.SetConnMaxLifetime(MaxLifetime)
 	db.SetConnMaxIdleTime(MaxIdleLifetime)
 
-	return &Pool{db: db, name: name, engine: cfg.Engine, secret: secret}, nil
+	return &Pool{db: db, name: name, engine: cfg.Engine, secret: secret, host: cfg.Host}, nil
 }
 
 // Name is the connection this pool was opened for.
@@ -170,7 +173,7 @@ func (p *Pool) Verify(ctx context.Context) error {
 		return &ConnectError{
 			Name:   p.name,
 			Engine: p.engine,
-			Err:    diagnose(scrub(err, p.secret)),
+			Err:    diagnose(scrub(err, p.secret), p.host),
 		}
 	}
 	return nil

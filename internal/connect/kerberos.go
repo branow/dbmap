@@ -88,10 +88,11 @@ func readable(path string, env environment) (string, error) {
 // crossRealm reports whether a connection's configured realm is a realm other
 // than the one its host belongs to.
 //
-// This build is single-realm by decision: gokrb5 does not follow a cross-realm
-// referral, the upstream fix has been unmerged for years, and the escape hatch
-// — ODBC over the system GSSAPI — costs cgo and a system dependency. So a
-// cross-realm setup is diagnosed here rather than attempted and misreported.
+// Measured behaviour: gokrb5 cannot OBTAIN a cross-realm service ticket — it
+// asks its own realm's KDC and is told the principal is unknown — but it will
+// happily USE one already sitting in the cache. So a cross-realm setup is not
+// refused; it is diagnosed here with the two commands that prime the cache,
+// because the driver's own message names neither realms nor tickets.
 func crossRealm(cfg config.Connection) bool {
 	realm := strings.ToUpper(strings.TrimSpace(cfg.Params[RealmParam]))
 	if realm == "" {
@@ -108,14 +109,9 @@ func crossRealm(cfg config.Connection) bool {
 	return domain != realm && !strings.HasSuffix(domain, "."+realm)
 }
 
-// crossRealmError is the diagnosis, phrased so the reader knows what to change.
+// crossRealmError is the diagnosis, phrased so the reader knows what to run.
 func crossRealmError(cfg config.Connection) error {
-	return &UnsupportedError{
-		Configuration: "cross-realm Kerberos",
-		Reason: "the pure-Go driver follows no realm referral, so a ticket for " +
-			strings.ToUpper(cfg.Params[RealmParam]) + " cannot authenticate to this host",
-		Remedy: "use a login in the host's own realm, or a SQL login",
-	}
+	return &CrossRealmError{Host: cfg.Host, Realm: strings.ToUpper(cfg.Params[RealmParam])}
 }
 
 // signatures recognise a failure whose cause is not what the driver's message
@@ -125,22 +121,17 @@ func crossRealmError(cfg config.Connection) error {
 var signatures = []struct {
 	Name  string
 	Match *regexp.Regexp
-	Error func() error
+	Error func(host string) error
 }{
 	{
 		// A listener in another realm answers a referral the driver cannot
 		// follow, and the server reports only that it could not build a
 		// security context.
-		Name:  "cross-realm",
-		Match: regexp.MustCompile(`(?i)cannot generate sspi context|KDC_ERR_WRONG_REALM|wrong realm`),
-		Error: func() error {
-			return &UnsupportedError{
-				Configuration: "cross-realm Kerberos",
-				Reason: "the server answered with a realm referral, which the pure-Go " +
-					"driver cannot follow",
-				Remedy: "authenticate in the host's own realm, or use a SQL login",
-			}
-		},
+		Name: "cross-realm",
+		Match: regexp.MustCompile(
+			`(?i)cannot generate sspi context|KDC_ERR_WRONG_REALM|wrong realm|` +
+				`KDC_ERR_S_PRINCIPAL_UNKNOWN|server not found in kerberos database`),
+		Error: func(host string) error { return &CrossRealmError{Host: host} },
 	},
 	{
 		// This build supplies pgx's GSSAPI provider itself, so a server asking
@@ -150,7 +141,7 @@ var signatures = []struct {
 		// third-party package.
 		Name:  "postgres-gssapi-unregistered",
 		Match: regexp.MustCompile(`(?i)no gssapi provider registered`),
-		Error: func() error {
+		Error: func(string) error {
 			return &KerberosError{
 				Stage:  StageCredential,
 				Reason: "this connection was opened without its Kerberos preparation",
@@ -162,7 +153,7 @@ var signatures = []struct {
 		// authentication method with no implementation behind it at all.
 		Name:  "postgres-unknown-auth",
 		Match: regexp.MustCompile(`(?i)unknown authentication (message|response)`),
-		Error: func() error {
+		Error: func(string) error {
 			return &UnsupportedError{
 				Configuration: "this server's authentication method",
 				Reason:        "it is neither scram nor Kerberos, the two this build speaks",
@@ -173,7 +164,7 @@ var signatures = []struct {
 	{
 		Name:  "no-ticket",
 		Match: regexp.MustCompile(`(?i)no credentials? cache|credentials cache file .* not found`),
-		Error: func() error {
+		Error: func(string) error {
 			return &CredentialCacheError{Path: defaultCache(ambient())}
 		},
 	},
@@ -182,14 +173,14 @@ var signatures = []struct {
 // diagnose replaces a driver failure with a named one where the signature is
 // recognised. An unrecognised failure is returned untouched: a guess dressed as
 // a diagnosis is worse than the driver's own words.
-func diagnose(err error) error {
+func diagnose(err error, host string) error {
 	if err == nil {
 		return nil
 	}
 	text := err.Error()
 	for _, signature := range signatures {
 		if signature.Match.MatchString(text) {
-			return signature.Error()
+			return signature.Error(host)
 		}
 	}
 	return err
