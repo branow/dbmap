@@ -29,7 +29,8 @@ actually changed.
   procedures.tsv    parameters inline
   functions.tsv     return type and parameters inline
   synonyms.tsv
-  columns/<schema>.<name>.tsv
+  columns/<schema>.<name>.tsv   one per table and view: every column, key, index
+  bodies/<schema>.<name>.sql    one per view, procedure and function
 ```
 
 `tables.tsv`:
@@ -53,7 +54,32 @@ email_contact   text     null
 # pk id
 ```
 
-It is all plain TSV, so an agent — or `grep` — can read it without a parser.
+`bodies/public.open_orders.sql`:
+
+```sql
+-- public.open_orders @94141fe08d0f22c2
+-- Exposes pending orders from the orders table, showing id and total per order.
+
+ SELECT o.id, o.total
+   FROM orders o
+     JOIN order_statuses s ON s.id = o.status_id
+  WHERE s.name = 'Pending'::text;
+```
+
+It is all plain text, so an agent — or `grep` — can read it without a parser.
+
+Bodies are written for the same reason columns are. A description is one
+sentence and names an object's *main* tables, not all of them, so it cannot
+answer the question you ask most after "what exists":
+
+```sh
+# what touches this table, and which of those write to it?
+grep -rl "dbo.Orders" .dbmap/prod/AppCore/bodies/
+grep -rliE "(insert|update|delete)[^;]{0,40}dbo\.Orders" .dbmap/prod/AppCore/bodies/
+```
+
+That answers exactly, with no database connection — which is the whole premise
+of the index. Bodies arrive already redacted, so a credential never reaches one.
 
 ## Installation
 

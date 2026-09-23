@@ -136,7 +136,7 @@ func TestAnObjectDroppedFromTheSourceLeavesTheIndex(t *testing.T) {
 	mustBuild(t, source, client, opts)
 
 	detail := filepath.Join(opts.Out, opts.Environment, opts.Database,
-		columnsDir, "dbo.Orders.tsv")
+		"columns", "dbo.Orders.tsv")
 	if _, err := os.Stat(detail); err != nil {
 		t.Fatalf("the first build wrote no detail file: %v", err)
 	}

@@ -56,3 +56,11 @@ type Structure struct {
 	// Target is what a synonym points at.
 	Target string
 }
+
+// MaxDefinition caps one module body, so a single pathological body cannot
+// decide the size of a fetch batch or of a file on disk. The prompt cap applied
+// later is lower on purpose, so the stored copy stays the fuller one.
+//
+// It lives here rather than beside an engine because both the engine that
+// applies it and the writer that reports a body was cut need to agree on it.
+const MaxDefinition = 50000

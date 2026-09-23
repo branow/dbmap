@@ -11,7 +11,10 @@ import (
 	"github.com/branow/dbmap/internal/catalog"
 )
 
-const columnsDir = "columns"
+const (
+	columnsDir = "columns"
+	bodiesDir  = "bodies"
+)
 
 const (
 	dirMode  fs.FileMode = 0o755
@@ -28,14 +31,17 @@ type Written struct {
 type Result struct {
 	Catalogs    []Written
 	ColumnFiles int
+	BodyFiles   int
 }
 
 // Write renders the whole index tree for one database. A catalog with no
 // objects is not written at all, so a database with no views has no views.tsv
 // rather than an empty one.
 func Write(dir string, entries []catalog.Entry) (Result, error) {
-	if err := os.MkdirAll(filepath.Join(dir, columnsDir), dirMode); err != nil {
-		return Result{}, err
+	for _, sub := range []string{columnsDir, bodiesDir} {
+		if err := os.MkdirAll(filepath.Join(dir, sub), dirMode); err != nil {
+			return Result{}, err
+		}
 	}
 
 	var result Result
@@ -65,6 +71,21 @@ func Write(dir string, entries []catalog.Entry) (Result, error) {
 			return Result{}, err
 		}
 		result.ColumnFiles++
+	}
+
+	// A module's body is written for the same reason a table's columns are: one
+	// sentence cannot answer "what writes to this table", and grepping the
+	// definitions can, with no database connection.
+	for _, entry := range entries {
+		spec, ok := catalog.Lookup(entry.Object.Kind)
+		if !ok || !spec.Module || strings.TrimSpace(entry.Structure.Definition) == "" {
+			continue
+		}
+		path := filepath.Join(dir, bodiesDir, entry.Key()+".sql")
+		if err := os.WriteFile(path, []byte(Body(entry)), fileMode); err != nil {
+			return Result{}, err
+		}
+		result.BodyFiles++
 	}
 
 	return result, nil
@@ -127,4 +148,21 @@ func ReadState(dir string) (map[string]catalog.State, error) {
 		}
 	}
 	return state, nil
+}
+
+// Remove deletes the detail files of dropped objects. Their catalog rows go by
+// being rewritten without them; the per-object files have to be deleted, and
+// the layout of those files is this package's knowledge, not a caller's.
+func Remove(dir string, keys []string) error {
+	for _, key := range keys {
+		for _, path := range []string{
+			filepath.Join(dir, columnsDir, key+".tsv"),
+			filepath.Join(dir, bodiesDir, key+".sql"),
+		} {
+			if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+				return err
+			}
+		}
+	}
+	return nil
 }

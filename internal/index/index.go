@@ -26,9 +26,6 @@ package index
 
 import (
 	"context"
-	"errors"
-	"io/fs"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -43,10 +40,7 @@ import (
 	"github.com/branow/dbmap/llm"
 )
 
-// columnsDir mirrors the per-object directory render writes into, named here
 // because dropping an object means deleting its detail file too.
-const columnsDir = "columns"
-
 // Options configure one build. Every field is resolved by the caller: this
 // package reads no flag, no environment variable and no config file.
 type Options struct {
@@ -128,6 +122,7 @@ type Summary struct {
 	Failed      []error
 	Catalogs    []render.Written
 	ColumnFiles int
+	BodyFiles   int
 }
 
 // Build runs the whole pipeline once and reports what it did. A nil client
@@ -214,8 +209,9 @@ func Build(ctx context.Context, src Source, client llm.Client, opts Options) (Su
 	}
 	summary.Catalogs = written.Catalogs
 	summary.ColumnFiles = written.ColumnFiles
+	summary.BodyFiles = written.BodyFiles
 
-	if err := remove(dir, work.Dropped); err != nil {
+	if err := render.Remove(dir, work.Dropped); err != nil {
 		return summary, err
 	}
 	return summary, nil
@@ -490,16 +486,4 @@ func write(
 		}
 	}
 	return render.Write(dir, entries)
-}
-
-// remove deletes the detail files of dropped objects. Their catalog rows go by
-// being rewritten without them; the detail files must be deleted explicitly.
-func remove(dir string, dropped []string) error {
-	for _, key := range dropped {
-		err := os.Remove(filepath.Join(dir, columnsDir, key+".tsv"))
-		if err != nil && !errors.Is(err, fs.ErrNotExist) {
-			return err
-		}
-	}
-	return nil
 }
