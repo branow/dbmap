@@ -84,7 +84,19 @@ func (e *Engine) halt(ctx context.Context, conn engine.Conn, stage string) error
 }
 
 // flag reads a SQL Server bit column, which arrives as "1" or "0".
-func flag(cell string) bool { return strings.TrimSpace(cell) == "1" }
+// flag reads a catalog boolean. Drivers disagree about how a SQL bit reaches a
+// string scan — go-mssqldb hands back a Go bool, which reads as "true", while a
+// catalog queried through other paths renders the same column as "1". Accepting
+// both is boundary parsing, not defensiveness: reading only one spelling made
+// every flag silently false, so nullable columns were written "not null" and a
+// primary key was indexed as an ordinary index.
+func flag(cell string) bool {
+	switch strings.ToLower(strings.TrimSpace(cell)) {
+	case "1", "true", "t", "yes", "y":
+		return true
+	}
+	return false
+}
 
 // cells trims every cell of a row, because the catalog pads nothing but the
 // parsers should not care either way.
