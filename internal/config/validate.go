@@ -12,11 +12,12 @@ var auths = map[Engine][]Auth{
 	Postgres:  {SCRAM, Kerberos},
 }
 
-// providers lists the llm providers and whether each needs an api key.
-var providers = map[Provider]struct{ NeedsKey bool }{
-	Anthropic:  {NeedsKey: true},
-	OpenAI:     {NeedsKey: true},
-	ClaudeCode: {NeedsKey: false},
+// providers lists the llm providers and what each one takes. ClaudeCode runs a
+// local binary, so it has neither a key nor an endpoint.
+var providers = map[Provider]struct{ NeedsKey, HasEndpoint bool }{
+	Anthropic:  {NeedsKey: true, HasEndpoint: true},
+	OpenAI:     {NeedsKey: true, HasEndpoint: true},
+	ClaudeCode: {NeedsKey: false, HasEndpoint: false},
 }
 
 var fallbacks = []Fallback{Never, Plaintext}
@@ -73,6 +74,9 @@ func NeedsPassword(a Auth) bool { return !secretless[a] }
 
 // NeedsAPIKey reports whether a provider requires a stored api key.
 func NeedsAPIKey(p Provider) bool { return providers[p].NeedsKey }
+
+// UsesBaseURL reports whether a provider has an endpoint at all.
+func UsesBaseURL(p Provider) bool { return providers[p].HasEndpoint }
 
 // Validate checks every entry is well formed and every profile binds names
 // that exist.

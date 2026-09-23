@@ -11,16 +11,16 @@ import (
 // ask fills a value the flags left empty: it prompts when a person is at the
 // terminal, and otherwise fails naming the flag rather than blocking on a
 // stream that will never carry an answer. def is only ever offered to a person.
-func ask(f *cmdutil.Factory, target *string, flag, label, def string, required bool) error {
-	if *target != "" {
-		return nil
-	}
-	if f.IO.CanPrompt() {
-		answer, err := f.IO.Prompt(label, def)
-		if err != nil {
-			return err
-		}
-		*target = answer
+// require settles a non-secret value from its flag, applying a default when the
+// flag has one.
+//
+// Nothing but a secret is ever prompted for. A prompt duplicates every flag's
+// validation in a second path that only runs on a terminal, which is how a
+// provider with no endpoint came to be asked for a base url and given "sdaf".
+// A missing value is an error naming the flag to set.
+func require(target *string, flag, def string, required bool) error {
+	if *target == "" {
+		*target = def
 	}
 	if *target == "" && required {
 		return &cmdutil.ValidationError{Field: flag, Reason: "required"}

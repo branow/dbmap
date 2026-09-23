@@ -63,35 +63,6 @@ func TestConfigFileHoldsNoSecret(t *testing.T) {
 	}
 }
 
-func TestConnectionAddPrompts(t *testing.T) {
-	h := newHarness(t)
-	h.interactive(strings.Join([]string{
-		"postgres",         // engine
-		"example.internal", // host
-		"AppCore",          // database
-		"scram",            // auth
-		"reader",           // username
-		password,           // password
-	}, "\n") + "\n")
-
-	if err := h.run("connection", "add", "primary"); err != nil {
-		t.Fatalf("connection add: %v", err)
-	}
-	entry, err := h.factory.Config.Connection("primary")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if entry.Engine != config.Postgres || entry.Auth != config.SCRAM {
-		t.Errorf("prompted connection = %+v", entry)
-	}
-	if got := h.store.Values[credentials.DBKey("primary")]; got != password {
-		t.Errorf("stored secret = %q", got)
-	}
-	if strings.Contains(h.out.String()+h.errOut.String(), password) {
-		t.Error("the password was echoed")
-	}
-}
-
 func TestConnectionAddRefusesRatherThanHangs(t *testing.T) {
 	tests := []struct {
 		name string
@@ -247,18 +218,6 @@ func TestConnectionRemove(t *testing.T) {
 	}
 	if _, ok := h.store.Values[credentials.DBKey("primary")]; ok {
 		t.Error("the password was left behind")
-	}
-}
-
-// TestAScriptedRunStatesEveryRequiredValue: a default is offered at a prompt,
-// never assumed for a non-interactive run.
-func TestAScriptedRunStatesEveryRequiredValue(t *testing.T) {
-	h := newHarness(t)
-	err := h.run("connection", "add", "primary", "--host", "example.internal",
-		"--username", "reader", "--no-input")
-	var invalid *cmdutil.ValidationError
-	if !errors.As(err, &invalid) || invalid.Field != "--engine" {
-		t.Fatalf("error = %v, want a ValidationError naming --engine", err)
 	}
 }
 

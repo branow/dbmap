@@ -69,6 +69,14 @@ func (f *Factory) Resolve(o config.Overrides) error {
 		return &ValidationError{Field: "output", Value: f.Config.Output(o),
 			Allowed: output.Formats()}
 	}
+	// A --profile naming nothing is a typo, not a silent fallback to the default.
+	// Left unchecked, a CI job with a misspelled profile runs against whatever
+	// happens to be current and reports success.
+	if o.Profile != "" {
+		if _, err := f.Config.Profile(o.Profile); err != nil {
+			return err
+		}
+	}
 	f.Flags.Profile = f.Config.ProfileName(o)
 	f.Flags.Output = format
 	f.Flags.NoInput = f.Config.NoInput(o)

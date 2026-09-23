@@ -68,24 +68,6 @@ func TestBackendAddRefusesWithoutAKey(t *testing.T) {
 	}
 }
 
-func TestBackendAddPrompts(t *testing.T) {
-	h := newHarness(t)
-	h.interactive("anthropic\nmodel-a\n\n" + apiKey + "\n")
-	if err := h.run("backend", "add", "main"); err != nil {
-		t.Fatalf("backend add: %v", err)
-	}
-	entry, err := h.factory.Config.Backend("main")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if entry.Provider != config.Anthropic || entry.Model != "model-a" {
-		t.Errorf("prompted backend = %+v", entry)
-	}
-	if strings.Contains(h.out.String()+h.errOut.String(), apiKey) {
-		t.Error("the api key was echoed")
-	}
-}
-
 func TestBackendProbeRunsBeforeStoring(t *testing.T) {
 	refused := errors.New("model rejected the key")
 	h := newHarness(t)

@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -102,6 +104,13 @@ func runIndex(ctx context.Context, f *cmdutil.Factory, connection string,
 	// entry is a copy, so the stored connection is untouched.
 	entry.Database = database
 
+	// Prove the destination is writable before a single query or model call: an
+	// unwritable --out discovered after the describe stage throws away work that
+	// was already paid for.
+	if err := writable(opts.out); err != nil {
+		return err
+	}
+
 	secret, err := dbSecret(f, connection, entry)
 	if err != nil {
 		return err
@@ -143,7 +152,25 @@ func runIndex(ctx context.Context, f *cmdutil.Factory, connection string,
 	if err != nil {
 		return err
 	}
-	return report(f, summary)
+	if err := report(f, summary); err != nil {
+		return err
+	}
+	return describeOutcome(summary)
+}
+
+// describeOutcome fails a run whose descriptions did not happen. The index is
+// still written — a partial index beats none — but a tree whose description
+// column is empty is not a success, and reporting one to CI is how a broken
+// backend goes unnoticed for a week.
+func describeOutcome(summary index.Summary) error {
+	if summary.DryRun || len(summary.Failed) == 0 {
+		return nil
+	}
+	return &cmdutil.UnavailableError{
+		Subject: "the describe stage",
+		Err: fmt.Errorf("%d batches failed and %d objects have no description",
+			len(summary.Failed), len(summary.Missing)),
+	}
 }
 
 // resolveConnection answers which connection this build reads: the argument
@@ -152,6 +179,13 @@ func resolveConnection(f *cmdutil.Factory, named string) (string, config.Connect
 	if named == "" {
 		_, profile, err := f.Config.Active(config.Overrides{Profile: f.Flags.Profile})
 		if err != nil {
+			// Only a profile that was actually named is a not-found; an empty
+			// name means nothing is configured yet, which needs the fuller hint.
+			var missing *config.NotFoundError
+			if errors.As(err, &missing) && missing.Kind == config.KindProfile &&
+				missing.Name != "" {
+				return "", config.Connection{}, err
+			}
 			return "", config.Connection{}, &cmdutil.NotConfiguredError{
 				What: "a connection",
 				Fix:  "name one, or run dbmap profile switch <name>",
@@ -238,6 +272,13 @@ func resolveBackend(f *cmdutil.Factory, named string) (string, config.Backend, e
 	if named == "" {
 		_, profile, err := f.Config.Active(config.Overrides{Profile: f.Flags.Profile})
 		if err != nil {
+			// Only a profile that was actually named is a not-found; an empty
+			// name means nothing is configured yet, which needs the fuller hint.
+			var missing *config.NotFoundError
+			if errors.As(err, &missing) && missing.Kind == config.KindProfile &&
+				missing.Name != "" {
+				return "", config.Backend{}, err
+			}
 			return "", config.Backend{}, &cmdutil.NotConfiguredError{
 				What: "an llm backend",
 				Fix:  "pass --backend, or run dbmap profile switch <name>",
@@ -338,4 +379,23 @@ func redactions(summary index.Summary) string {
 		parts = append(parts, string(class)+" "+strconv.Itoa(summary.Redactions[class]))
 	}
 	return strings.Join(parts, ", ")
+}
+
+// writable reports whether the index tree can be written where --out points.
+func writable(dir string) error {
+	if dir == "" {
+		dir = DefaultOut
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return &cmdutil.ValidationError{Field: "--out", Value: dir,
+			Reason: "cannot be written: " + err.Error()}
+	}
+	probe, err := os.CreateTemp(dir, ".dbmap-write-*")
+	if err != nil {
+		return &cmdutil.ValidationError{Field: "--out", Value: dir,
+			Reason: "cannot be written: " + err.Error()}
+	}
+	name := probe.Name()
+	probe.Close()
+	return os.Remove(name)
 }

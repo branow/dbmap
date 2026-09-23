@@ -32,11 +32,10 @@ func newProfileCreate(f *cmdutil.Factory) *cobra.Command {
 		Short: "Create a profile without activating it",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
-			if err := ask(f, &entry.Connection, "--connection", "connection", "",
-				true); err != nil {
+			if err := require(&entry.Connection, "--connection", "", true); err != nil {
 				return err
 			}
-			if err := ask(f, &entry.Backend, "--backend", "backend", "", true); err != nil {
+			if err := require(&entry.Backend, "--backend", "", true); err != nil {
 				return err
 			}
 			if entry.Output != "" {
