@@ -32,16 +32,15 @@ func newConnection(f *cmdutil.Factory) *cobra.Command {
 // connectionOptions is the flag surface of `connection add`. Every value is a
 // flag so a CI run needs no terminal, and every one is prompted for otherwise.
 type connectionOptions struct {
-	engine     string
-	host       string
-	port       int
-	database   string
-	auth       string
-	username   string
-	params     map[string]string
-	production bool
-	stdin      bool
-	noVerify   bool
+	engine   string
+	host     string
+	port     int
+	database string
+	auth     string
+	username string
+	params   map[string]string
+	stdin    bool
+	noVerify bool
 }
 
 func newConnectionAdd(f *cmdutil.Factory) *cobra.Command {
@@ -62,8 +61,6 @@ func newConnectionAdd(f *cmdutil.Factory) *cobra.Command {
 	flags.StringVar(&opts.auth, "auth", "", "authentication mode")
 	flags.StringVar(&opts.username, "username", "", "login name")
 	flags.StringToStringVar(&opts.params, "param", nil, "extra driver parameter, repeatable")
-	flags.BoolVar(&opts.production, "production", false,
-		"mark as production; dbmap refuses to index it")
 	flags.BoolVar(&opts.stdin, "password-stdin", false, "read the password from stdin")
 	flags.BoolVar(&opts.noVerify, "no-verify", false, "store without probing the connection")
 	return cmd
@@ -101,23 +98,15 @@ func addConnection(c *cobra.Command, f *cmdutil.Factory, name string,
 			return err
 		}
 	}
-	if !c.Flags().Changed("production") {
-		marked, err := confirm(f, "is this a production database", false)
-		if err != nil {
-			return err
-		}
-		opts.production = marked
-	}
 
 	entry := config.Connection{
-		Engine:     engine,
-		Host:       opts.host,
-		Port:       opts.port,
-		Database:   opts.database,
-		Auth:       auth,
-		Username:   opts.username,
-		Params:     opts.params,
-		Production: opts.production,
+		Engine:   engine,
+		Host:     opts.host,
+		Port:     opts.port,
+		Database: opts.database,
+		Auth:     auth,
+		Username: opts.username,
+		Params:   opts.params,
 	}
 	key := credentials.DBKey(name)
 	secret, from, err := readSecret(f, opts.stdin, key, "password", "--password-stdin",
@@ -159,7 +148,6 @@ func newConnectionList(f *cmdutil.Factory) *cobra.Command {
 					{Name: "host", Value: entry.Host},
 					{Name: "database", Value: entry.Database},
 					{Name: "auth", Value: string(entry.Auth)},
-					{Name: "production", Value: entry.Production},
 				})
 			}
 			return f.Writer().List(records)
@@ -186,7 +174,6 @@ func newConnectionShow(f *cmdutil.Factory) *cobra.Command {
 				{Name: "auth", Value: string(entry.Auth)},
 				{Name: "username", Value: entry.Username},
 				{Name: "params", Value: entry.Params},
-				{Name: "production", Value: entry.Production},
 			})
 		},
 	}

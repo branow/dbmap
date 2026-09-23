@@ -19,7 +19,7 @@ func TestConnectionAddFromFlags(t *testing.T) {
 	err := h.run("connection", "add", "primary", "--engine", "sqlserver",
 		"--host", "example.internal", "--port", "1433", "--database", "AppCore",
 		"--auth", "sqllogin", "--username", "reader", "--param", "encrypt=true",
-		"--production", "--password-stdin", "--no-input")
+		"--password-stdin", "--no-input")
 	if err != nil {
 		t.Fatalf("connection add: %v", err)
 	}
@@ -28,7 +28,7 @@ func TestConnectionAddFromFlags(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if entry.Host != "example.internal" || entry.Port != 1433 || !entry.Production {
+	if entry.Host != "example.internal" || entry.Port != 1433 {
 		t.Errorf("stored connection = %+v", entry)
 	}
 	if entry.Params["encrypt"] != "true" {
@@ -71,7 +71,6 @@ func TestConnectionAddPrompts(t *testing.T) {
 		"AppCore",          // database
 		"scram",            // auth
 		"reader",           // username
-		"n",                // production
 		password,           // password
 	}, "\n") + "\n")
 
@@ -84,9 +83,6 @@ func TestConnectionAddPrompts(t *testing.T) {
 	}
 	if entry.Engine != config.Postgres || entry.Auth != config.SCRAM {
 		t.Errorf("prompted connection = %+v", entry)
-	}
-	if entry.Production {
-		t.Error("the production answer was not honoured")
 	}
 	if got := h.store.Values[credentials.DBKey("primary")]; got != password {
 		t.Errorf("stored secret = %q", got)
@@ -411,7 +407,6 @@ func TestADefinitiveRejectionRefuses(t *testing.T) {
 		name string
 		err  error
 	}{
-		{name: "production target", err: &connect.ProductionError{Name: "local"}},
 		{name: "unsupported setup",
 			err: &connect.UnsupportedError{Configuration: "cross-realm kerberos"}},
 		{name: "credential cache",

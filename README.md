@@ -201,8 +201,6 @@ Supported engines are `postgres` and `sqlserver`; authentication is `scram`
 `anthropic`, `openai` (any OpenAI-compatible endpoint) and `claudecode`, which
 shells out to the Claude Code CLI and needs no API key of its own.
 
-A connection marked `--production` is refused: `dbmap` will not index it.
-
 ### Building an index
 
 ```sh
@@ -288,7 +286,6 @@ are not available to the tool at all:
 - Procedure bodies are redacted on arrival, before anything is cached or sent:
   patterns keep the key and drop the value, so `Password = <redacted>` still
   records that a procedure authenticates somewhere.
-- A connection marked as production cannot be indexed.
 
 ## Development
 

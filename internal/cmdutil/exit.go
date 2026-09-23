@@ -70,7 +70,6 @@ var rules = []struct {
 	{ExitValidation, as[*config.InvalidError]},
 	{ExitValidation, as[*config.InUseError]},
 	{ExitValidation, as[*output.UnknownFormatError]},
-	{ExitValidation, as[*connect.ProductionError]},
 	{ExitValidation, as[*connect.UnsupportedError]},
 
 	{ExitAuth, as[*AuthError]},

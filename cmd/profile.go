@@ -134,7 +134,6 @@ func newProfileShow(f *cmdutil.Factory) *cobra.Command {
 				{Name: "engine", Value: string(connection.Engine)},
 				{Name: "host", Value: connection.Host},
 				{Name: "database", Value: connection.Database},
-				{Name: "production", Value: connection.Production},
 				{Name: "backend", Value: entry.Backend},
 				{Name: "provider", Value: string(backend.Provider)},
 				{Name: "model", Value: backend.Model},

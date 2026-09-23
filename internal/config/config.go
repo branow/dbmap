@@ -51,14 +51,14 @@ const (
 // Connection is one named database connection, non-secret fields only. Its
 // password, when the auth mode needs one, lives under the key db:<name>.
 type Connection struct {
-	Engine     Engine            `yaml:"engine"`
-	Host       string            `yaml:"host"`
-	Port       int               `yaml:"port,omitempty"`
-	Database   string            `yaml:"database,omitempty"`
-	Auth       Auth              `yaml:"auth"`
-	Username   string            `yaml:"username,omitempty"`
-	Params     map[string]string `yaml:"params,omitempty"`
-	Production bool              `yaml:"production,omitempty"`
+	Engine   Engine `yaml:"engine"`
+	Host     string `yaml:"host"`
+	Port     int    `yaml:"port,omitempty"`
+	Database string `yaml:"database,omitempty"`
+	Auth     Auth   `yaml:"auth"`
+	Username string `yaml:"username,omitempty"`
+	// Params are extra driver parameters, passed through untouched.
+	Params map[string]string `yaml:"params,omitempty"`
 }
 
 // Backend is one named llm backend, non-secret fields only. The api key, when
