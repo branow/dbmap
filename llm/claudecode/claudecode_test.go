@@ -103,7 +103,6 @@ func TestCompleteRoundTrip(t *testing.T) {
 	for _, pair := range [][2]string{
 		{"--output-format", "json"},
 		{"--allowedTools", ""},
-		{"--max-turns", "1"},
 		{"--model", llm.DefaultModel},
 		{"--append-system-prompt", request().System},
 	} {
@@ -112,11 +111,11 @@ func TestCompleteRoundTrip(t *testing.T) {
 		}
 	}
 
-	// The schema travels as a file, never as an argv string: a batch schema
-	// plus a 40,000-character prompt exceeds argv limits on some platforms.
-	file := value(args, "--json-schema")
-	if file == "" || strings.Contains(file, "{") {
-		t.Fatalf("--json-schema = %q, want a file path", file)
+	// Structured output arrives as a tool call, so capping turns at one cuts
+	// the answer off: the run returns error_max_turns with no structured output
+	// at all. This flag must never come back.
+	if value(args, "--max-turns") != "" {
+		t.Fatalf("argv carries --max-turns; it truncates the structured answer: %v", args)
 	}
 	if got := record.stdin(t); got != request().Prompt {
 		t.Fatalf("stdin = %q, want the prompt", got)
@@ -149,28 +148,26 @@ func TestUsageComesBackMostlyZeroed(t *testing.T) {
 	}
 }
 
-func TestSchemaFileHoldsTheRequestSchema(t *testing.T) {
+// The CLI takes the schema itself on --json-schema and rejects a path with
+// "--json-schema is not valid JSON". Passing a filename was a real bug: every
+// batch failed, the index came back fully described-as-missing, and nothing in
+// the suite noticed because the stub accepted any argument at all.
+func TestSchemaTravelsInlineAsJSON(t *testing.T) {
 	record := stub(t, success, 0)
-	// The stub copies the schema file aside, because the provider deletes it
-	// as soon as the run finishes. Argv is --print --output-format json
-	// --json-schema <file>, so the file is the fifth argument.
-	dir := record.dir
-	script := "#!/bin/sh\n" +
-		"shift 4; cp \"$1\" " + filepath.Join(dir, "schema") + "\n" +
-		"cat " + filepath.Join(dir, "stdout") + "\n"
-	if err := os.WriteFile(filepath.Join(dir, "claude"), []byte(script), 0o700); err != nil {
-		t.Fatal(err)
-	}
 
 	if _, err := client(t).Complete(context.Background(), request()); err != nil {
 		t.Fatalf("err = %v", err)
 	}
-	got, err := os.ReadFile(filepath.Join(dir, "schema"))
-	if err != nil {
-		t.Fatal(err)
+
+	got := value(record.argv(t), "--json-schema")
+	if got == "" {
+		t.Fatal("argv carries no --json-schema")
 	}
-	if string(got) != schema {
-		t.Fatalf("schema file = %s, want %s", got, schema)
+	if !json.Valid([]byte(got)) {
+		t.Fatalf("--json-schema = %q, which is not JSON; the CLI refuses a path", got)
+	}
+	if got != schema {
+		t.Fatalf("--json-schema = %s, want the request schema %s", got, schema)
 	}
 }
 

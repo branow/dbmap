@@ -78,38 +78,18 @@ func (p *provider) Complete(ctx context.Context, req llm.Request) (*llm.Response
 		model = p.cfg.Model
 	}
 
-	// The schema goes in a temp file, not in argv: a batch schema plus a
-	// 40,000-character prompt exceeds argv limits on some platforms.
-	schema, err := os.CreateTemp("", "dbmap-schema-*.json")
-	if err != nil {
-		return nil, &llm.Error{
-			Class: llm.ClassUnavailable, Provider: Name, Model: model,
-			Detail: "could not write the schema file", Err: err,
-		}
-	}
-	defer os.Remove(schema.Name())
-	if _, err := schema.Write(req.Schema); err != nil {
-		schema.Close()
-		return nil, &llm.Error{
-			Class: llm.ClassUnavailable, Provider: Name, Model: model,
-			Detail: "could not write the schema file", Err: err,
-		}
-	}
-	if err := schema.Close(); err != nil {
-		return nil, &llm.Error{
-			Class: llm.ClassUnavailable, Provider: Name, Model: model,
-			Detail: "could not write the schema file", Err: err,
-		}
-	}
-
-	// --allowedTools "" and --max-turns 1 keep this a pure model call rather
-	// than an agent run.
+	// The schema travels inline: `--json-schema` takes the schema itself, and
+	// hands back "not valid JSON" for a path. Verified against the CLI.
+	//
+	// --allowedTools "" keeps this a pure model call rather than an agent run.
+	// There is deliberately no --max-turns: structured output arrives as a tool
+	// call, so capping turns at one cuts the answer off and the run comes back
+	// error_max_turns with no structured_output at all.
 	args := []string{
 		"--print",
 		"--output-format", "json",
-		"--json-schema", schema.Name(),
+		"--json-schema", string(req.Schema),
 		"--allowedTools", "",
-		"--max-turns", "1",
 		"--model", model,
 	}
 	if req.System != "" {
