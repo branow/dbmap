@@ -5,12 +5,14 @@ import (
 	"database/sql"
 	"strconv"
 	"strings"
+
+	"github.com/branow/dbmap/internal/catalog"
 )
 
-// MaxDefinition caps one module body on the way out of the database, so that a
-// single pathological body cannot decide the size of a batch. The prompt cap,
-// applied much later, is lower on purpose so the stored copy stays fuller.
-const MaxDefinition = 50000
+// MaxDefinition caps one module body on the way out of the database. It is
+// catalog's constant because the writer has to agree with the engine about when
+// a body was cut.
+const MaxDefinition = catalog.MaxDefinition
 
 // ModuleBatch is how many objects one body fetch asks for. See DESIGN.md.
 const ModuleBatch = 40

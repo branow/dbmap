@@ -295,6 +295,8 @@ func report(f *cmdutil.Factory, summary index.Summary) error {
 		output.Field{Name: "described", Value: summary.Described},
 		output.Field{Name: "unchanged", Value: summary.Unchanged},
 		output.Field{Name: "sampled", Value: summary.Sampled},
+		output.Field{Name: "column files", Value: summary.ColumnFiles},
+		output.Field{Name: "body files", Value: summary.BodyFiles},
 		output.Field{Name: "missing", Value: len(summary.Missing)},
 		output.Field{Name: "failed batches", Value: len(summary.Failed)},
 		output.Field{Name: "redactions", Value: redactions(summary)},

@@ -16,9 +16,23 @@ those in one pass without a parser, and a person can `grep` them.
 
 ## Output shape
 
-Tables and views get a file each, because a reader needs every column.
-Procedures and functions do not: their parameters fit on one line, and the index
-does not reproduce bodies.
+Tables and views get a columns file each, because a reader needs every column
+and no summary can substitute for exact names and types.
+
+Views, procedures and functions get a body file each. The test for what earns a
+file is whether one sentence can substitute for the thing. For an object's
+*purpose* it can, and the catalog row carries that. For "what writes to this
+table" it cannot — a one-sentence description names the main tables by
+construction and is lossy on purpose — so only the definition answers it, and
+grepping a local tree answers it with no connection. A view is the sharpest
+case: its meaning simply *is* its query.
+
+The marginal cost is near zero. Bodies are already fetched to build the prompt,
+already redacted on arrival, and already fingerprinted for staleness, so a body
+file is exactly as stale as the catalog row beside it. Bodies are capped at
+50,000 characters by the engine; a file cut at the cap says so, because the tail
+of a procedure is where the writes usually are and a reader who mistook a
+fragment for the whole would conclude it writes nothing.
 
 Staleness state (`modified`, `fingerprint`) lives in the catalogs themselves
 rather than in a sidecar file. A parallel state file drifts out of step with the
