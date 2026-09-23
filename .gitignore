@@ -5,6 +5,7 @@
 !/.github/
 !/LICENSE
 !/README.md
+!/AGENTS.md
 !/go.mod
 !/go.sum
 !/main.go

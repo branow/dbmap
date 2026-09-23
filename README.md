@@ -301,9 +301,10 @@ cd llm && go test ./...     # the llm module is separate
 on the rest of the tool, so it can be imported on its own by anything that wants
 one structured-output call across several providers.
 
+`AGENTS.md` is the contract for a coding agent changing this repository, and
 `docs/DESIGN.md` explains why the tool is built the way it is — the staleness
-tiers, the safety rules and what they were measured against, and what each
-engine has to implement.
+tiers, the safety rules and what they guard against, and what a new engine has to
+implement.
 
 ## License
 
