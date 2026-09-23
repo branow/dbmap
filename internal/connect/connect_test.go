@@ -55,40 +55,6 @@ func sqlLogin() config.Connection {
 	}
 }
 
-// The tool reads catalogs and samples rows. Neither belongs against production,
-// so the refusal is in the resolver rather than in a command: a future caller
-// taking another route still cannot reach one.
-func TestAProductionConnectionRefusesToResolve(t *testing.T) {
-	cfg := sqlLogin()
-	cfg.Production = true
-
-	pool, err := Open("prod", cfg, secret)
-
-	if pool != nil {
-		t.Error("a production connection produced a pool")
-	}
-	var refused *ProductionError
-	if !errors.As(err, &refused) {
-		t.Fatalf("error is %T, want *ProductionError", err)
-	}
-	if refused.Name != "prod" {
-		t.Errorf("the error names %q, want the connection name", refused.Name)
-	}
-}
-
-// The refusal must not depend on the engine, the auth mode, or anything else
-// being valid: production is checked before any of it is looked at.
-func TestProductionIsRefusedBeforeAnythingElseIsLookedAt(t *testing.T) {
-	cfg := config.Connection{Engine: "nonsense", Production: true}
-
-	_, err := Open("prod", cfg, "")
-
-	var refused *ProductionError
-	if !errors.As(err, &refused) {
-		t.Fatalf("error is %T, want *ProductionError", err)
-	}
-}
-
 // A DSN holds the password. An error is the most widely copied string a program
 // produces, so the two must never meet.
 func TestNoErrorEverCarriesTheSecret(t *testing.T) {

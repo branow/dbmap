@@ -169,7 +169,6 @@ So, non-negotiably:
 - **Health is checked before every source and every batch**, not once at
   startup. An unreadable reading is *unknown*, never healthy: not being able to
   see the floor is not the same as being above it.
-- **Production is refused.** A connection marked production does not resolve.
 
 ## Secrets and personal data
 

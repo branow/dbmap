@@ -1,11 +1,9 @@
 // Package connect turns a stored connection record plus a secret resolved at
 // run time into a pooled handle an engine can read through.
 //
-// Two rules govern everything here. The data source name carries the password,
+// One rule governs everything here: the data source name carries the password,
 // so it is assembled in memory and goes nowhere else — errors name the
-// connection instead. And a connection marked production refuses to resolve
-// before a DSN is built, here rather than in a command, so no caller reaches
-// production by taking a different route.
+// connection instead, never the string that opened it.
 package connect
 
 import (
@@ -104,9 +102,6 @@ type Pool struct {
 // whatever it refuses is refused before anything is dialled; call Verify to
 // prove the connection actually works.
 func Open(name string, cfg config.Connection, secret string) (*Pool, error) {
-	if cfg.Production {
-		return nil, &ProductionError{Name: name}
-	}
 
 	spec, ok := drivers[cfg.Engine]
 	if !ok {

@@ -125,8 +125,7 @@ func TestSaveAndLoadRoundTrip(t *testing.T) {
 	c := NewAt(path)
 	if err := c.SetConnection("primary", Connection{Engine: SQLServer,
 		Host: "example.internal", Port: 1433, Database: "AppCore", Auth: SQLLogin,
-		Username: "reader", Params: map[string]string{"encrypt": "true"},
-		Production: true}); err != nil {
+		Username: "reader", Params: map[string]string{"encrypt": "true"}}); err != nil {
 		t.Fatal(err)
 	}
 	if err := c.SetBackend("main", Backend{Provider: OpenAI, Model: "model-a",
@@ -151,7 +150,7 @@ func TestSaveAndLoadRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if entry.Host != "example.internal" || entry.Port != 1433 || !entry.Production {
+	if entry.Host != "example.internal" || entry.Port != 1433 {
 		t.Errorf("connection round trip lost fields: %+v", entry)
 	}
 	if reloaded.CurrentProfile != "work" {

@@ -139,7 +139,7 @@ func credential(_ context.Context, p *preflight) (string, error) {
 }
 
 // connection resolves the record into a pool without dialling: this is where a
-// production target is refused, a Kerberos credential cache is read, and a
+// Kerberos credential cache is read, and a
 // cross-realm setup is named.
 func connection(_ context.Context, p *preflight) (string, error) {
 	opened, err := p.open(p.name, p.entry, p.secret)

@@ -7,15 +7,6 @@ import (
 	"github.com/branow/dbmap/internal/config"
 )
 
-// ProductionError refuses a connection the config marks as production.
-type ProductionError struct {
-	Name string
-}
-
-func (e *ProductionError) Error() string {
-	return fmt.Sprintf("connection %q is marked production and will not be opened", e.Name)
-}
-
 // CredentialCacheError reports a Kerberos credential cache the pure-Go driver
 // cannot use. gokrb5 reads FILE: caches only, while the macOS default is API:,
 // which nothing but the system GSSAPI can open. The remedy is spelled out

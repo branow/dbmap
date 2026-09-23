@@ -192,7 +192,7 @@ func TestDoctorSkipsTheChecksAFailureMadeUnanswerable(t *testing.T) {
 		failed string
 	}{
 		{"the connection cannot be opened", nil,
-			&connect.ProductionError{Name: "primary"}, "connection"},
+			&connect.CredentialCacheError{Path: "/tmp/cc"}, "connection"},
 		{"the login is refused", &server{verify: errors.New("login failed")}, nil, "auth"},
 		{"the read path is refused", &server{probe: errors.New("permission denied")},
 			nil, "read-only"},
