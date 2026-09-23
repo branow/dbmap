@@ -28,7 +28,7 @@ const manifestColumns = 6
 // here leaves with catalog.Signal absent by construction.
 func manifestQuery() string {
 	return routineCTE() + `
-SELECT n.nspname, c.relname, 'rel:' || c.relkind,
+SELECT n.nspname, c.relname, 'rel:' || c.relkind::text,
   CASE WHEN c.relkind IN ('r','p','m') THEN GREATEST(c.reltuples, 0) ELSE 0 END::bigint,
   CASE WHEN c.relkind IN ('r','p','m')
        THEN pg_catalog.pg_total_relation_size(c.oid) / 1024 ELSE 0 END,
@@ -39,7 +39,7 @@ JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
 WHERE c.relkind IN (` + RelKinds() + `)
   AND ` + schemaScope("n.nspname") + `
 UNION ALL
-SELECT r.schema, r.name, 'pro:' || p.prokind, 0, 0, 0
+SELECT r.schema, r.name, 'pro:' || p.prokind::text, 0, 0, 0
 FROM routine r
 JOIN pg_catalog.pg_proc p ON p.oid = r.oid
 ORDER BY 1, 2`
