@@ -1,13 +1,7 @@
 // Package postgres reads a Postgres catalog out of pg_catalog, owning the
 // relkind and prokind codes, the system schemas it refuses to index, and the
-// shape of every query sent to Postgres.
-//
-// Two things differ from the SQL Server engine, both deliberate. There is no
-// modify signal, because Postgres records none; an object with no signal always
-// refetches and the content fingerprint does the real gating. And the guard is
-// a session rather than a statement suffix, because Postgres has a read-only
-// transaction mode, so the server makes the promise instead of it being
-// inferred from statement text. The read-only gate still runs in front of it.
+// shape of every query sent. There is no modify signal because Postgres records
+// none, so the content fingerprint does all the gating here.
 package postgres
 
 import (
@@ -19,7 +13,7 @@ import (
 )
 
 // The session guard: caps low enough that a catalog query never notices them
-// and a runaway one cannot get far. See Guard for the third setting.
+// and a runaway one cannot get far.
 const (
 	StatementTimeout = "120s"
 	WorkMem          = "16MB"
@@ -28,16 +22,14 @@ const (
 // Engine is the Postgres implementation of engine.Engine.
 type Engine struct{}
 
-// New returns the Postgres engine. It holds no state, so one value serves every
-// database in a run.
+// New returns the Postgres engine. It holds no state.
 func New() *Engine { return &Engine{} }
 
 // Name is the engine name as config spells it.
 func (*Engine) Name() string { return "postgres" }
 
-// Guard is this engine's resource cap, entirely a session: the server enforces
-// the read-only transaction, and SET LOCAL cannot leak onto the next borrower
-// of a pooled connection.
+// Guard is entirely a session: the server enforces the read-only transaction,
+// and SET LOCAL cannot leak onto the next borrower of a pooled connection.
 func (*Engine) Guard() engine.Guard {
 	return engine.Guard{
 		Session: engine.Session{
@@ -51,13 +43,11 @@ func (*Engine) Guard() engine.Guard {
 	}
 }
 
-// Quote renders one identifier in double quotes, doubling an embedded quote so
-// a name carrying one cannot end the quoting early.
+// Quote renders one identifier in double quotes, doubling an embedded quote.
 func (*Engine) Quote(identifier string) string {
 	return `"` + strings.ReplaceAll(identifier, `"`, `""`) + `"`
 }
 
-// query runs one statement through the central safety path.
 func (e *Engine) query(
 	ctx context.Context,
 	conn engine.Conn,
@@ -76,10 +66,9 @@ func (e *Engine) halt(ctx context.Context, conn engine.Conn, stage string) error
 	return engine.Assert(health, stage)
 }
 
-// flag reads a catalog boolean. Drivers disagree about how a boolean reaches a
-// string scan, spelling it "1" or "true", and reading only one spelling made
-// every flag silently false: nullable columns were written "not null" and a
-// primary key was indexed as an ordinary index.
+// flag reads a catalog boolean. Both spellings are required: drivers spell a
+// boolean "1" or "true", and reading only one silently falsified every
+// nullability and primary key.
 func flag(cell string) bool {
 	switch strings.ToLower(strings.TrimSpace(cell)) {
 	case "1", "true", "t", "yes", "y":
@@ -88,7 +77,6 @@ func flag(cell string) bool {
 	return false
 }
 
-// cells trims every cell of a row.
 func cells(row []string) []string {
 	out := make([]string, len(row))
 	for i, cell := range row {
@@ -97,7 +85,6 @@ func cells(row []string) []string {
 	return out
 }
 
-// number reads a catalog count, treating anything unparseable as zero.
 func number(cell string) int64 {
 	n, err := strconv.ParseInt(cell, 10, 64)
 	if err != nil {

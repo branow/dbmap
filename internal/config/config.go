@@ -1,9 +1,6 @@
-// Package config owns config.yml: two independent named namespaces
-// (database connections and llm backends), the profiles that bind one of each,
-// and the flag > env > file > default precedence chain.
-//
-// No struct in this package has a secret field. A password or an api key lives
-// in the keychain, reached only through internal/credentials.
+// Package config owns config.yml. No struct here has a secret field: a
+// password or an api key lives in the keychain, reached only through
+// internal/credentials.
 package config
 
 import "os"
@@ -11,7 +8,6 @@ import "os"
 // Engine names a supported database engine.
 type Engine string
 
-// The supported engines.
 const (
 	SQLServer Engine = "sqlserver"
 	Postgres  Engine = "postgres"
@@ -20,7 +16,6 @@ const (
 // Auth names how a connection authenticates.
 type Auth string
 
-// The supported authentication modes.
 const (
 	SQLLogin Auth = "sqllogin"
 	Kerberos Auth = "kerberos"
@@ -30,26 +25,23 @@ const (
 // Provider names an llm backend implementation.
 type Provider string
 
-// The supported llm providers.
 const (
 	Anthropic  Provider = "anthropic"
 	OpenAI     Provider = "openai"
 	ClaudeCode Provider = "claudecode"
 )
 
-// Fallback is the secret-storage policy: what happens when the OS keychain
-// cannot answer.
+// Fallback is the secret-storage policy when the OS keychain cannot answer.
+// Never is the default: plaintext is opt-in only.
 type Fallback string
 
-// The storage policies. Never is the default, so a transient keychain failure
-// can never persist a password to disk; plaintext is opt-in only.
 const (
 	Never     Fallback = "never"
 	Plaintext Fallback = "plaintext"
 )
 
-// Connection is one named database connection, non-secret fields only. Its
-// password, when the auth mode needs one, lives under the key db:<name>.
+// Connection is one named database connection. Its password, when the auth
+// mode needs one, lives in the keychain under db:<name>.
 type Connection struct {
 	Engine   Engine `yaml:"engine"`
 	Host     string `yaml:"host"`
@@ -61,23 +53,22 @@ type Connection struct {
 	Params map[string]string `yaml:"params,omitempty"`
 }
 
-// Backend is one named llm backend, non-secret fields only. The api key, when
-// the provider needs one, lives under the key llm:<name>.
+// Backend is one named llm backend. Its api key, when the provider needs one,
+// lives in the keychain under llm:<name>.
 type Backend struct {
 	Provider Provider `yaml:"provider"`
 	Model    string   `yaml:"model,omitempty"`
 	BaseURL  string   `yaml:"base_url,omitempty"`
 }
 
-// Profile binds one connection to one backend and carries output preferences.
-// It selects; it never redefines either.
+// Profile binds one connection to one backend; it never redefines either.
 type Profile struct {
 	Connection string `yaml:"connection"`
 	Backend    string `yaml:"backend"`
 	Output     string `yaml:"output,omitempty"`
 }
 
-// Secrets holds the secret-storage policy, which is itself not a secret.
+// Secrets holds the secret-storage policy.
 type Secrets struct {
 	Fallback Fallback `yaml:"fallback,omitempty"`
 }
@@ -95,8 +86,8 @@ type Config struct {
 	env  func(string) string
 }
 
-// New returns an empty config with no file behind it. Save fails until a path
-// is given, which keeps a test from writing outside its temporary directory.
+// New returns an empty config with no file behind it; Save fails until a path
+// is given.
 func New() *Config {
 	return &Config{
 		Connections: map[string]Connection{},
@@ -119,11 +110,10 @@ func (c *Config) Path() string { return c.path }
 // SetPath binds the config to a file.
 func (c *Config) SetPath(p string) { c.path = p }
 
-// SetEnv replaces the environment lookup, so the precedence chain is testable
-// without mutating the process.
+// SetEnv replaces the environment lookup, so precedence is testable without
+// mutating the process.
 func (c *Config) SetEnv(lookup func(string) string) { c.env = lookup }
 
-// lookup reads one DBMAP_* variable through the injected environment.
 func (c *Config) lookup(name string) string {
 	if c.env == nil {
 		return ""

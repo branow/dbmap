@@ -10,19 +10,16 @@ import (
 )
 
 // source is one metadata query and how to fold its rows into a structure.
-// Sources are data so adding one is a row rather than a branch.
 type source struct {
 	Name string
 	SQL  func() string
-	// Width is the narrowest row this source can still shape. A shorter row is
-	// dropped.
+	// Width is the narrowest usable row; a shorter one is dropped.
 	Width int
-	// Fold applies one row to the structure it belongs to.
-	Fold func(target *parsed, row []string)
+	Fold  func(target *parsed, row []string)
 }
 
 // parsed is a structure under construction. Index rows arrive one per column,
-// so they are held flat until every row is in and then folded.
+// so they are held flat until every row is in.
 type parsed struct {
 	structure catalog.Structure
 	indexRows []indexRow
@@ -35,8 +32,7 @@ type indexRow struct {
 	column  string
 }
 
-// sources is the structure stage: five bounded queries over sys.* catalog views
-// only, so no user data page is touched and no query needs a real memory grant.
+// sources is the structure stage: bounded queries over sys.* views only.
 var sources = []source{
 	{
 		Name:  "columns",
@@ -152,8 +148,8 @@ var sized = []string{"varchar", "nvarchar", "char", "nchar", "varbinary", "binar
 // scaled are the types that carry a precision and a scale instead.
 var scaled = []string{"decimal", "numeric"}
 
-// width renders the width a reader needs — "(50)", "(18,2)", "(max)". Note
-// max_length is in BYTES, so a national type halves it, and -1 means (max).
+// width renders "(50)", "(18,2)", "(max)". max_length is in BYTES, so a
+// national type halves it, and -1 means (max).
 func width(kind, maxLength, precision, scale string) string {
 	if contains(scaled, kind) {
 		return "(" + precision + "," + scale + ")"
@@ -183,7 +179,6 @@ func contains(list []string, value string) bool {
 	return false
 }
 
-// fold applies one source's rows to the structures under construction.
 func fold(target map[string]*parsed, source source, rows [][]string) {
 	for _, raw := range rows {
 		if len(raw) < source.Width {
@@ -201,7 +196,7 @@ func fold(target map[string]*parsed, source source, rows [][]string) {
 }
 
 // foldIndexes turns one-row-per-column index rows into one entry per index and
-// lifts the primary key out, because a reader wants it named separately.
+// lifts the primary key out.
 func foldIndexes(rows []indexRow) ([]string, []catalog.Index) {
 	var order []string
 	byName := map[string]*catalog.Index{}
@@ -233,7 +228,7 @@ func foldIndexes(rows []indexRow) ([]string, []catalog.Index) {
 }
 
 // Structure runs every source against one database, asking for room between
-// each, and returns a structure per object key.
+// each.
 func (e *Engine) Structure(
 	ctx context.Context,
 	conn engine.Conn,

@@ -13,13 +13,9 @@ import (
 )
 
 // WithCache serves repeated identical requests from disk, so a killed run
-// resumes free.
-//
-// Entries are content-addressed, so a changed prompt simply misses and nothing
-// needs invalidating. Only the response is stored, because a prompt may carry
-// sampled database rows. A hit replays the recorded [Usage] too, so place
-// [WithUsage] inside this wrapper when the totals should count money actually
-// spent. An unreadable or unwritable cache falls through to the provider.
+// resumes free. Only the response is stored, because a prompt may carry sampled
+// database rows. A hit replays the recorded [Usage] too, so place [WithUsage]
+// inside this wrapper for totals that count money actually spent.
 func WithCache(next Client, dir string) Client {
 	if dir == "" {
 		return next
@@ -47,9 +43,7 @@ func (c *cache) Complete(ctx context.Context, req Request) (*Response, error) {
 	return resp, nil
 }
 
-// CacheKey is the content address of a request under a given provider: the
-// hex sha256 of provider, model, system, prompt and schema, separated by a byte
-// that cannot occur inside any of them.
+// CacheKey is the content address of a request under a given provider.
 func CacheKey(provider string, req Request) string {
 	sum := sha256.Sum256([]byte(strings.Join([]string{
 		provider,

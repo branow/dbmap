@@ -22,8 +22,8 @@ const (
 	ExitUnavailable = 6
 )
 
-// Code documents one exit status. The table is data, so the documentation, the
-// mapping below and the reachability test read one list.
+// Code documents one exit status, so the docs, the mapping below and the
+// reachability test read one list.
 type Code struct {
 	Value   int
 	Name    string
@@ -42,27 +42,22 @@ var table = []Code{
 		"database, model"},
 }
 
-// Codes lists the documented exit statuses.
 func Codes() []Code {
 	out := make([]Code, len(table))
 	copy(out, table)
 	return out
 }
 
-// rules map an error to an exit code, walked in order. Every match is errors.Is
-// or errors.As, never a message, so rewording an error cannot change a script's
-// behaviour. Order is meaning: connect and engine wrap, and a wrapped cause is
-// the more actionable of the two, so causes match before wrappers - which is
-// why a Kerberos failure inside a ConnectError reports auth, not unavailable.
+// rules map an error to an exit code, matched by errors.Is/As and never by
+// message. The order is load-bearing: a wrapped cause is matched before its
+// wrapper, so a Kerberos failure inside a ConnectError reports auth, not
+// unavailable.
 var rules = []struct {
 	code  int
 	match func(error) bool
 }{
 	{ExitCancelled, is(ErrCancelled)},
 	{ExitCancelled, is(iostreams.ErrCancelled)},
-
-	// This tool refusing its own generated SQL is a defect here, not a user
-	// error, so it matches before every wrapper that could disguise it.
 
 	{ExitValidation, is(iostreams.ErrNoInput)},
 	{ExitValidation, as[*ValidationError]},
@@ -87,8 +82,7 @@ var rules = []struct {
 	{ExitUnavailable, as[*engine.UnhealthyError]},
 }
 
-// ExitCode translates an error into the process's exit status. It is the single
-// translation point, called only from main.
+// ExitCode is the single translation from an error to a process exit status.
 func ExitCode(err error) int {
 	if err == nil {
 		return ExitOK

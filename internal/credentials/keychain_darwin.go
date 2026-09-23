@@ -148,8 +148,8 @@ import (
 	"unsafe"
 )
 
-// The OSStatus codes dbmap names. They are Go constants because cgo cannot be
-// used from a _test.go file, and the tables below are worth testing.
+// Go constants because cgo cannot be used from a _test.go file, and the tables
+// below are worth testing.
 const (
 	statusNotFound      = int32(C.errSecItemNotFound)
 	statusAuthFailed    = int32(C.errSecAuthFailed)
@@ -160,9 +160,7 @@ const (
 	statusAllocate      = int32(C.errSecAllocate)
 )
 
-// sentinels names the OSStatus codes the store above reasons about: the item is
-// absent, or the keychain would release it only after the user answered
-// something. The whole authorization family maps to one sentinel because one
+// sentinels: the whole authorization family maps to errBlocked because one
 // remedy answers all of it, however the refusal was spelled.
 var sentinels = map[int32]error{
 	statusNotFound:      errMissing,
@@ -171,19 +169,17 @@ var sentinels = map[int32]error{
 	statusCanceled:      errBlocked,
 }
 
-// statuses names the remaining OSStatus codes dbmap has words for. Anything not
-// listed still fails: an unrecognised refusal is a refusal, and dbmap never
-// answers one by writing the secret somewhere weaker.
+// statuses names the codes dbmap has words for. Anything unlisted still fails:
+// an unrecognised refusal is a refusal.
 var statuses = map[int32]string{
 	statusNotAvailable: "no keychain is available",
 	statusDuplicate:    "the item already exists",
 	statusAllocate:     "the keychain could not allocate memory",
 }
 
-// itemGet reads one item through the Security framework. The item's access
-// control names this binary, and that identity changes with every build, so
-// allow decides whether the keychain may ask about the difference or must
-// refuse the read.
+// itemGet reads one item. The item's access control names this binary and that
+// identity changes with every build, so allow decides whether the keychain may
+// ask about the difference or must refuse the read.
 func itemGet(service, account string, allow ui) (string, error) {
 	cService, cAccount, release := strings2(service, account)
 	defer release()
@@ -224,8 +220,7 @@ func itemDelete(service, account string, allow ui) error {
 	return nil
 }
 
-// statusError translates an OSStatus, wrapping a sentinel so the number
-// survives into the message.
+// statusError wraps a sentinel so the number survives into the message.
 func statusError(code int32) error {
 	if sentinel, ok := sentinels[code]; ok {
 		return fmt.Errorf("%w (OSStatus %d)", sentinel, code)
@@ -236,7 +231,7 @@ func statusError(code int32) error {
 	return fmt.Errorf("the keychain refused the request (OSStatus %d)", code)
 }
 
-// flag converts the decision to a C int, which cgo will not widen a bool into.
+// flag: cgo will not widen a Go bool into a C int.
 func flag(allow ui) C.int {
 	if allow {
 		return 1
@@ -244,7 +239,7 @@ func flag(allow ui) C.int {
 	return 0
 }
 
-// strings2 converts both C strings at once: every call needs the same pair.
+// strings2 converts both C strings at once.
 func strings2(a, b string) (*C.char, *C.char, func()) {
 	first, second := C.CString(a), C.CString(b)
 	return first, second, func() {

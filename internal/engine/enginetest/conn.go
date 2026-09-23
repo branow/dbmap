@@ -1,5 +1,4 @@
-// Package enginetest is the in-memory Conn both engine implementations are
-// tested against, so no test opens a database.
+// Package enginetest is the in-memory Conn both engines are tested against.
 package enginetest
 
 import (
@@ -12,15 +11,13 @@ import (
 )
 
 // Conn is a scripted engine.Conn. Answers match by substring in registration
-// order, so a test names the fragment that identifies a query rather than
-// repeating the whole of it.
+// order.
 type Conn struct {
 	answers []answer
 	calls   []Call
 }
 
-// Call is one statement that reached the connection, with the session the
-// guard asked for around it.
+// Call is one statement that reached the connection, with its session.
 type Call struct {
 	Session   engine.Session
 	Statement string
@@ -34,7 +31,7 @@ type answer struct {
 }
 
 // New returns a connection that answers nothing. An unmatched statement returns
-// no rows rather than failing, so a test scripts only the queries it is about.
+// no rows rather than failing.
 func New() *Conn { return &Conn{} }
 
 // On registers rows for every statement containing match.
@@ -49,7 +46,6 @@ func (c *Conn) Fail(match string, err error) *Conn {
 	return c
 }
 
-// Query records the call and replays whatever was scripted for it.
 func (c *Conn) Query(
 	_ context.Context,
 	session engine.Session,
@@ -68,7 +64,7 @@ func (c *Conn) Query(
 	return &rows{}, nil
 }
 
-// Calls is every statement that reached the connection, in order.
+// Calls is every call that reached the connection, in order.
 func (c *Conn) Calls() []Call { return c.calls }
 
 // Statements is every statement that reached the connection, in order.
@@ -80,7 +76,7 @@ func (c *Conn) Statements() []string {
 	return out
 }
 
-// Last is the statement that reached the connection most recently.
+// Last is the most recent statement.
 func (c *Conn) Last() string {
 	if len(c.calls) == 0 {
 		return ""
@@ -88,8 +84,7 @@ func (c *Conn) Last() string {
 	return c.calls[len(c.calls)-1].Statement
 }
 
-// Only is the single statement a one-query engine method sent, and an error
-// when it sent any other number.
+// Only is the single statement sent, or an error if there was not exactly one.
 func (c *Conn) Only() (string, error) {
 	if len(c.calls) != 1 {
 		return "", errors.New("enginetest: expected exactly one statement")
@@ -97,7 +92,6 @@ func (c *Conn) Only() (string, error) {
 	return c.calls[0].Statement, nil
 }
 
-// rows replays scripted string cells through the engine.Rows contract.
 type rows struct {
 	data [][]string
 	at   int
@@ -121,8 +115,8 @@ func (r *rows) Close() error {
 	return nil
 }
 
-// Scan fills the sql.NullString destinations the query path asks for. A cell
-// written as the empty string arrives as a NULL, matching a real driver.
+// Scan fills sql.NullString destinations; an empty cell arrives as NULL, as a
+// real driver does.
 func (r *rows) Scan(dest ...any) error {
 	row := r.data[r.at-1]
 	for i := range dest {

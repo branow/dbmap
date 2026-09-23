@@ -14,8 +14,8 @@ import (
 // Name is the file every dbmap installation reads.
 const Name = "config.yml"
 
-// dir is the per-user configuration directory, honouring the platform's own
-// convention: XDG_CONFIG_HOME, then %AppData% on Windows, then ~/.config.
+// dir is the per-user configuration directory: XDG_CONFIG_HOME, then %AppData%
+// on Windows, then ~/.config.
 func dir() (string, error) {
 	if home := os.Getenv("XDG_CONFIG_HOME"); home != "" {
 		return filepath.Join(home, "dbmap"), nil
@@ -32,8 +32,7 @@ func dir() (string, error) {
 	return filepath.Join(home, ".config", "dbmap"), nil
 }
 
-// Path reports where config.yml lives for this user. DBMAP_CONFIG overrides it
-// outright, which is how a CI job points at its own file.
+// Path reports where config.yml lives; DBMAP_CONFIG overrides it outright.
 func Path() (string, error) {
 	if p := os.Getenv("DBMAP_CONFIG"); p != "" {
 		return p, nil
@@ -45,8 +44,8 @@ func Path() (string, error) {
 	return filepath.Join(d, Name), nil
 }
 
-// Load reads the user's config. A missing file is an empty config, not an
-// error: a first run has nothing configured yet.
+// Load reads the user's config; a missing file is an empty config, not an
+// error.
 func Load() (*Config, error) {
 	p, err := Path()
 	if err != nil {
@@ -55,8 +54,7 @@ func Load() (*Config, error) {
 	return LoadFrom(p)
 }
 
-// LoadFrom reads a config from an explicit path and validates it: a file on
-// disk is external input, checked once, here.
+// LoadFrom reads and validates a config from an explicit path.
 func LoadFrom(path string) (*Config, error) {
 	c := NewAt(path)
 	raw, err := os.ReadFile(path)
@@ -76,8 +74,7 @@ func LoadFrom(path string) (*Config, error) {
 	return c, nil
 }
 
-// Save writes the file 0600, creating the directory on demand so the first
-// `dbmap connection add` on a machine works.
+// Save writes the file 0600, creating the directory on demand.
 func (c *Config) Save() error {
 	if c.path == "" {
 		return errors.New("config has no path")

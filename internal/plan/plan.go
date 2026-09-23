@@ -1,14 +1,7 @@
 // Package plan turns a fresh manifest plus the previously written index into
 // the two work sets a build runs: Fetch, decided by modify signal, and
 // Describe, decided by content fingerprint. Both are pure; the fetch stage runs
-// between them. The split is what makes a rebuild after a release cost a few
-// dozen describe calls rather than one per object — the release moves the
-// modify signal on everything it touched, and the fingerprint then discards the
-// ones whose content is unchanged.
-//
-// An object missing from the prior state is new and is always both fetched and
-// described. An object in the state but absent from the manifest was dropped
-// from the database; Fetch reports it so the writer can remove its index row.
+// between them.
 package plan
 
 import (
@@ -18,15 +11,14 @@ import (
 	"github.com/branow/dbmap/internal/fingerprint"
 )
 
-// Reason records why an object is being refetched, so a build log can say what
-// it is doing and why.
+// Reason records why an object is being refetched.
 type Reason string
 
 const (
 	// New is an object the previous build never saw.
 	New Reason = "new"
-	// Modified is an object whose engine modify signal moved, or that carries
-	// no modify signal at all and therefore can never be proven untouched.
+	// Modified covers a moved modify signal and an absent one: an object with
+	// no signal can never be proven untouched, so it always refetches.
 	Modified Reason = "modified"
 	// Sample is a table whose row count crossed the depth the describer sees.
 	Sample Reason = "sample"
@@ -43,9 +35,7 @@ type Rule struct {
 }
 
 // FetchReasons is the fetch decision as data, in the order it is asked; the
-// first rule that applies and fires names the reason. The sample rule is scoped
-// to tables because only a table is described partly from its rows — on other
-// kinds it would be a no-op that merely looks intentional.
+// first rule that applies and fires names the reason.
 var FetchReasons = []Rule{
 	{
 		Reason: New,
@@ -82,8 +72,8 @@ func (r Rule) applies(object catalog.Object) bool {
 type FetchPlan struct {
 	Fetch []catalog.Object
 	Reuse []catalog.Object
-	// Dropped are keys the previous build indexed that the database no longer
-	// has, sorted, so the writer can remove their rows.
+	// Dropped are keys the database no longer has, sorted, so the writer can
+	// remove their rows.
 	Dropped []string
 	// Reasons maps an object key to why it is being fetched.
 	Reasons map[string]Reason
@@ -131,15 +121,13 @@ func reasonFor(object catalog.Object, prior *catalog.State) (Reason, bool) {
 // DescribePlan is what the model is asked to look at, and what it is not.
 type DescribePlan struct {
 	Describe []catalog.Entry
-	// Unchanged are entries whose content hash matches the index. They keep the
-	// description already written for them and cost nothing.
+	// Unchanged keep the description already written for them.
 	Unchanged []catalog.Entry
 }
 
 // Describe splits freshly fetched entries by content fingerprint, each returned
-// carrying the hash just computed so the writer never recomputes one. An entry
-// is redescribed when its hash moved, or when the hash matches but the prior
-// state holds no description to reuse.
+// carrying the hash just computed. An entry whose hash matches but has no prior
+// description to reuse is still described.
 func Describe(fetched []catalog.Entry, state map[string]catalog.State) (DescribePlan, error) {
 	var plan DescribePlan
 

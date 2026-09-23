@@ -8,9 +8,8 @@ import (
 	"github.com/branow/dbmap/internal/catalog"
 )
 
-// Columns renders one table or view file: what the object is, then its columns,
-// then its key and indexes as comments, so a reader takes the whole thing in
-// without parsing a second shape.
+// Columns renders one table or view file: a header, the columns, then key and
+// indexes as comments.
 func Columns(entry catalog.Entry) string {
 	lines := []string{"# " + entry.Key() + " @" + entry.Fingerprint}
 	if entry.Object.Kind == catalog.Table {

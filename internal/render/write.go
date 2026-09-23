@@ -35,8 +35,7 @@ type Result struct {
 }
 
 // Write renders the whole index tree for one database. A catalog with no
-// objects is not written at all, so a database with no views has no views.tsv
-// rather than an empty one.
+// objects is not written at all.
 func Write(dir string, entries []catalog.Entry) (Result, error) {
 	for _, sub := range []string{columnsDir, bodiesDir} {
 		if err := os.MkdirAll(filepath.Join(dir, sub), dirMode); err != nil {
@@ -73,9 +72,6 @@ func Write(dir string, entries []catalog.Entry) (Result, error) {
 		result.ColumnFiles++
 	}
 
-	// A module's body is written for the same reason a table's columns are: one
-	// sentence cannot answer "what writes to this table", and grepping the
-	// definitions can, with no database connection.
 	for _, entry := range entries {
 		spec, ok := catalog.Lookup(entry.Object.Kind)
 		if !ok || !spec.Module || strings.TrimSpace(entry.Structure.Definition) == "" {
@@ -92,8 +88,6 @@ func Write(dir string, entries []catalog.Entry) (Result, error) {
 }
 
 // ParseCatalog reads one catalog file back into the state the planner expects.
-// Row counts come back only for the catalog that stores them, which is the only
-// one whose objects are ever sampled.
 func ParseCatalog(content string, c Catalog) map[string]catalog.State {
 	state := make(map[string]catalog.State)
 	at := rowsIndex(c)
@@ -104,8 +98,8 @@ func ParseCatalog(content string, c Catalog) map[string]catalog.State {
 			continue
 		}
 		cells := strings.Split(line, tab)
-		// A row one cell short is a row whose description was empty and got
-		// trimmed; anything shorter than that is not a row.
+		// One cell short means an empty description was trimmed; shorter is
+		// not a row.
 		if cells[0] == "name" || cells[0] == "" || len(cells) < width-1 {
 			continue
 		}
@@ -130,9 +124,8 @@ func cell(cells []string, i int) string {
 	return cells[i]
 }
 
-// ReadState reads the whole index's staleness state back out of the catalogs it
-// was written to. A missing catalog is not an error: a kind the database does
-// not have never got a file.
+// ReadState reads staleness state back out of the catalogs. A missing catalog
+// is not an error: a kind the database lacks never got a file.
 func ReadState(dir string) (map[string]catalog.State, error) {
 	state := make(map[string]catalog.State)
 	for _, c := range Catalogs {
@@ -150,9 +143,8 @@ func ReadState(dir string) (map[string]catalog.State, error) {
 	return state, nil
 }
 
-// Remove deletes the detail files of dropped objects. Their catalog rows go by
-// being rewritten without them; the per-object files have to be deleted, and
-// the layout of those files is this package's knowledge, not a caller's.
+// Remove deletes the per-object files of dropped objects; their catalog rows go
+// by being rewritten without them.
 func Remove(dir string, keys []string) error {
 	for _, key := range keys {
 		for _, path := range []string{

@@ -1,13 +1,11 @@
 package iostreams
 
-// Palette writes ANSI attributes, or nothing when color is off. The styles are
-// a table rather than one method per code, so adding one is data.
+// Palette writes ANSI attributes, or nothing when color is off.
 type Palette struct{ enabled bool }
 
 // Style names one visual attribute.
 type Style string
 
-// The styles dbmap uses.
 const (
 	Bold   Style = "bold"
 	Red    Style = "red"
@@ -26,7 +24,6 @@ var codes = map[Style]string{
 
 const reset = "\x1b[0m"
 
-// Enabled reports whether this palette emits escape sequences.
 func (p *Palette) Enabled() bool { return p.enabled }
 
 // Apply wraps text in a style, or returns it untouched when color is off or the

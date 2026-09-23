@@ -1,7 +1,7 @@
 package config
 
-// Setting is one scalar key reachable through `dbmap config`. The keys are a
-// table, so `config list` and `config set` cannot drift apart.
+// Setting is one scalar key reachable through `dbmap config`, tabulated so
+// `config list` and `config set` cannot drift apart.
 type Setting struct {
 	Key string
 	Doc string
@@ -58,8 +58,7 @@ func (c *Config) Get(key string) (string, error) {
 	return s.get(c), nil
 }
 
-// Set writes one setting. Writing current_profile is a switch, so it validates
-// that the profile exists.
+// Set writes one setting; writing current_profile validates the profile.
 func (c *Config) Set(key, value string) error {
 	s, err := setting(key)
 	if err != nil {

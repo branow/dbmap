@@ -7,12 +7,10 @@ import (
 	"github.com/branow/dbmap/internal/engine"
 )
 
-// healthColumns is how wide a health row is; anything narrower is unknown.
 const healthColumns = 4
 
-// HealthQuery asks the server how much room it has left. It reads four DMVs and
-// nothing else — no user table, no sort, no grouping — so the question about
-// memory pressure cannot itself cause any.
+// HealthQuery reads four DMVs and nothing else, so asking about memory pressure
+// cannot itself cause any.
 func HealthQuery() string {
 	return `SELECT available_physical_memory_kb / 1048576,
   system_memory_state_desc,
@@ -21,8 +19,8 @@ func HealthQuery() string {
 FROM sys.dm_os_sys_memory`
 }
 
-// parseHealth reads one health row. A missing or short row returns nil, which
-// Classify reports as unknown rather than healthy.
+// parseHealth reads one health row; a missing or short row is nil, which
+// Classify reports as unknown.
 func parseHealth(rows [][]string) *engine.Reading {
 	if len(rows) == 0 || len(rows[0]) < healthColumns {
 		return nil
@@ -45,13 +43,11 @@ func parseHealth(rows [][]string) *engine.Reading {
 	}
 }
 
-// Health reports whether the server has room for the next batch. A failed
-// health query is not a caller's error but a reading that could not be taken,
-// which is unknown, which is not healthy.
+// Health reports whether the server has room for the next batch. A failed query
+// is a reading that could not be taken, not a caller's error.
 func (e *Engine) Health(ctx context.Context, conn engine.Conn) (engine.Health, error) {
 	rows, err := e.query(ctx, conn, HealthQuery())
 	if err != nil {
-		// A reading that did not arrive is unknown, never healthy.
 		return engine.Classify(nil), nil
 	}
 	return engine.Classify(parseHealth(rows)), nil

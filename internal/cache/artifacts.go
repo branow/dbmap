@@ -7,13 +7,11 @@ import (
 	"github.com/branow/dbmap/internal/redact"
 )
 
-// BodyChars caps a module body on the way into the cache, well above the prompt
-// cap so the stored copy is always the fuller one.
+// BodyChars caps a stored module body, above the prompt cap so the stored copy
+// is always the fuller one.
 const BodyChars = 50000
 
-// Manifest is the fetch stage's checkpoint: every object in scope for one
-// database, including the modify signal every later entry is keyed by. A
-// resumed run reads this first.
+// Manifest is the fetch stage's checkpoint, and what a resumed run reads first.
 type Manifest struct {
 	Environment string           `json:"environment"`
 	Database    string           `json:"database"`
@@ -21,9 +19,8 @@ type Manifest struct {
 	Objects     []catalog.Object `json:"objects"`
 }
 
-// Module is a cached module body: the redacted text, and the tally of what was
-// stripped. The tally is stored so a resumed run that refetches nothing can
-// still report that a secret was found.
+// Module is a cached body plus the tally of what was stripped; the tally is
+// stored so a run that refetches nothing still reports a secret was found.
 type Module struct {
 	Body       string        `json:"body"`
 	Redactions redact.Counts `json:"redactions,omitempty"`
@@ -34,8 +31,7 @@ func (s *Scope) Manifest() (Manifest, bool, error) {
 	return load[Manifest](s, manifestOf, "", "")
 }
 
-// PutManifest stores the manifest, replacing any previous one: it is a whole
-// database's list and is only ever written complete.
+// PutManifest replaces any previous manifest; it is only written complete.
 func (s *Scope) PutManifest(manifest Manifest) error {
 	return save(s, manifestOf, "", "", manifest)
 }
@@ -46,11 +42,8 @@ func (s *Scope) Structure(key string, signal catalog.Signal) (catalog.Structure,
 	return load[catalog.Structure](s, structureOf, key, signal)
 }
 
-// PutStructure stores one object's structure. Definition is dropped here
-// because a structure arrives from the engine unredacted; bodies enter only
-// through PutModule, which takes a type only the redactor can build. Stripping
-// the field makes "the cache never holds a raw secret" a property of the code
-// rather than a convention callers are trusted to follow.
+// PutStructure stores one object's structure, dropping Definition: a structure
+// arrives from the engine unredacted, so a body may only enter via PutModule.
 func (s *Scope) PutStructure(key string, signal catalog.Signal, value catalog.Structure) error {
 	value.Definition = ""
 	return save(s, structureOf, key, signal, value)
@@ -61,9 +54,8 @@ func (s *Scope) Module(key string, signal catalog.Signal) (Module, bool, error) 
 	return load[Module](s, moduleOf, key, signal)
 }
 
-// PutModule stores one object's body. It takes a redact.Body rather than a
-// string so that text which has not been through the redactor cannot be
-// offered, and caps the stored text at BodyChars.
+// PutModule stores one object's body, capped at BodyChars. It takes a
+// redact.Body so unredacted text cannot be offered.
 func (s *Scope) PutModule(key string, signal catalog.Signal, body redact.Body) error {
 	return save(s, moduleOf, key, signal, Module{
 		Body:       trim(body.String()),
@@ -71,7 +63,7 @@ func (s *Scope) PutModule(key string, signal catalog.Signal, body redact.Body) e
 	})
 }
 
-// trim cuts a body to BodyChars, counting runes so a cut never lands inside one.
+// trim counts runes, so a cut never lands inside one.
 func trim(body string) string {
 	runes := []rune(body)
 	if len(runes) <= BodyChars {

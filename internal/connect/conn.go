@@ -7,16 +7,14 @@ import (
 	"github.com/branow/dbmap/internal/engine"
 )
 
-// conn adapts a pooled *sql.DB to engine.Conn. It runs what it is handed:
-// engine.Query has already proved the statement read-only and guarded it.
+// conn adapts a pooled *sql.DB to engine.Conn.
 type conn struct {
 	db *sql.DB
 }
 
 // Query runs one statement in the session the guard asked for. A session guard
-// needs a transaction: it is the only scope Postgres gives SET LOCAL, the only
-// way to ask for read-only access, and the only way to pin both to one pooled
-// connection. A guard with no session uses the pool directly.
+// needs a transaction: it is the only scope for SET LOCAL and the only way to
+// pin it to one pooled connection.
 func (c conn) Query(
 	ctx context.Context,
 	session engine.Session,
@@ -46,9 +44,8 @@ func (c conn) Query(
 	return &scoped{Rows: rows, tx: tx}, nil
 }
 
-// scoped ties a cursor to the transaction that scoped its guard, so closing the
-// cursor ends it. Rollback rather than commit, because there is nothing to
-// commit and rollback says so.
+// scoped ties a cursor to its guard's transaction, so closing the cursor ends
+// it. Rollback rather than commit: there is nothing to commit.
 type scoped struct {
 	*sql.Rows
 	tx *sql.Tx

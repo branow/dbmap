@@ -10,19 +10,18 @@ import (
 	"github.com/branow/dbmap/internal/config"
 )
 
-// CredCacheParam is the connection parameter naming the credential cache, as
-// the driver spells it.
+// CredCacheParam is the connection parameter naming the credential cache.
 const CredCacheParam = "krb5-credcachefile"
 
 // RealmParam is the connection parameter naming the Kerberos realm.
 const RealmParam = "krb5-realm"
 
-// ccachePrefix matches an MIT Kerberos cache type prefix. Two or more letters,
-// so a Windows drive letter is not mistaken for one.
+// ccachePrefix matches an MIT cache type prefix. Two or more letters, so a
+// Windows drive letter is not mistaken for one.
 var ccachePrefix = regexp.MustCompile(`^([A-Za-z]{2,}):(.*)$`)
 
-// environment is the ambient state credential-cache resolution reads, as a
-// struct so a test can resolve a cache with no env var and no file on disk.
+// environment is the ambient state cache resolution reads, as a struct so a
+// test needs no env var and no file on disk.
 type environment struct {
 	getenv func(string) string
 	stat   func(string) (os.FileInfo, error)
@@ -37,11 +36,10 @@ func ambient() environment {
 	return environment{getenv: os.Getenv, stat: os.Stat, uid: uid}
 }
 
-// credentialCache locates the FILE: credential cache this connection will use,
-// or explains why there is not one. It prefers what the connection says, then
-// the environment, then the MIT default. Any type but FILE: is refused rather
-// than attempted, because gokrb5 reads no other kind and the driver's failure
-// for that case is indistinguishable from having no ticket at all.
+// credentialCache locates the FILE: cache this connection will use, preferring
+// the connection, then the environment, then the MIT default. Any other type is
+// refused rather than attempted: gokrb5 reads no other kind, and the driver's
+// failure for that case looks like having no ticket at all.
 func credentialCache(cfg config.Connection, env environment) (string, error) {
 	if path := strings.TrimSpace(cfg.Params[CredCacheParam]); path != "" {
 		return readable(strings.TrimPrefix(path, "FILE:"), env)
@@ -61,14 +59,13 @@ func credentialCache(cfg config.Connection, env environment) (string, error) {
 	return readable(defaultCache(env), env)
 }
 
-// defaultCache is where MIT Kerberos puts a file cache when nothing says
-// otherwise, and what the remedy message names, so the two cannot drift.
+// defaultCache is the MIT default, and what the remedy message names.
 func defaultCache(env environment) string {
 	return filepath.Join(os.TempDir(), "krb5cc_"+env.uid)
 }
 
-// readable refuses a cache that is not there or cannot be opened, so an absent
-// ticket gets the same clear remedy as a wrong cache type.
+// readable refuses a cache that is missing or unopenable, so an absent ticket
+// gets the same remedy as a wrong cache type.
 func readable(path string, env environment) (string, error) {
 	info, err := env.stat(path)
 	if err != nil {
@@ -80,10 +77,8 @@ func readable(path string, env environment) (string, error) {
 	return path, nil
 }
 
-// crossRealm reports whether a connection's configured realm differs from the
-// one its host belongs to. Such a setup is diagnosed rather than refused:
-// gokrb5 cannot obtain a cross-realm service ticket but will use one already in
-// the cache, and the driver's own message names neither realms nor tickets.
+// crossRealm reports whether a connection's configured realm differs from its
+// host's.
 func crossRealm(cfg config.Connection) bool {
 	realm := strings.ToUpper(strings.TrimSpace(cfg.Params[RealmParam]))
 	if realm == "" {
@@ -100,7 +95,6 @@ func crossRealm(cfg config.Connection) bool {
 	return domain != realm && !strings.HasSuffix(domain, "."+realm)
 }
 
-// crossRealmError is the diagnosis, phrased so the reader knows what to run.
 func crossRealmError(cfg config.Connection) error {
 	return &CrossRealmError{
 		Host:  cfg.Host,
@@ -110,16 +104,14 @@ func crossRealmError(cfg config.Connection) error {
 }
 
 // signatures recognise a failure whose cause is not what the driver's message
-// says it is, as data so the table reads as the list of things known to go
-// wrong.
+// says it is.
 var signatures = []struct {
 	Name  string
 	Match *regexp.Regexp
 	Error func(host string) error
 }{
 	{
-		// A listener in another realm answers a referral the driver cannot
-		// follow, reported only as a failure to build a security context.
+		// A listener in another realm answers a referral the driver cannot follow.
 		Name: "cross-realm",
 		Match: regexp.MustCompile(
 			`(?i)cannot generate sspi context|KDC_ERR_WRONG_REALM|wrong realm|` +
@@ -127,8 +119,6 @@ var signatures = []struct {
 		Error: func(host string) error { return &CrossRealmError{Host: host} },
 	},
 	{
-		// This build supplies pgx's GSSAPI provider, so reaching this message
-		// means the connection was opened without its Kerberos preparation.
 		Name:  "postgres-gssapi-unregistered",
 		Match: regexp.MustCompile(`(?i)no gssapi provider registered`),
 		Error: func(string) error {
@@ -139,7 +129,6 @@ var signatures = []struct {
 		},
 	},
 	{
-		// Anything else — SSPI, SCM credentials — has no implementation here.
 		Name:  "postgres-unknown-auth",
 		Match: regexp.MustCompile(`(?i)unknown authentication (message|response)`),
 		Error: func(string) error {
@@ -159,9 +148,8 @@ var signatures = []struct {
 	},
 }
 
-// diagnose replaces a driver failure with a named one where the signature is
-// recognised. An unrecognised failure is returned untouched, because a guess
-// dressed as a diagnosis is worse than the driver's own words.
+// diagnose replaces a recognised driver failure with a named one, returning an
+// unrecognised one untouched.
 func diagnose(err error, host string) error {
 	if err == nil {
 		return nil
@@ -175,10 +163,9 @@ func diagnose(err error, host string) error {
 	return err
 }
 
-// SPN is the service principal a Kerberos ticket for this engine is issued
-// against. SQL Server registers MSSQLSvc with the port; PostgreSQL registers
-// the service named by krbsrvname, which defaults to postgres and carries no
-// port. A remedy naming the wrong one sends the reader in circles.
+// SPN is the service principal a ticket for this engine is issued against. SQL
+// Server registers MSSQLSvc with the port, PostgreSQL postgres with none, and a
+// remedy naming the wrong one sends the reader in circles.
 func SPN(engine config.Engine, host string) string {
 	if engine == config.Postgres {
 		return "postgres/" + host

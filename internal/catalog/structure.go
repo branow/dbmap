@@ -1,34 +1,28 @@
 package catalog
 
-// Returns is the parameter name carrying a function's return type. Catalogs
-// emit the return row with an empty name, which the engine fills in with this
-// so the writer can lift it out of the call signature.
+// Returns is the parameter name carrying a function's return type; catalogs
+// emit that row with an empty name.
 const Returns = "(returns)"
 
 // Column is one column of a table or view.
 type Column struct {
 	Name string
 	Type string
-	// Length is the width a reader needs, already rendered: "(20)", "(18,2)",
-	// "(max)", or empty for a type that carries none.
+	// Length is already rendered: "(20)", "(18,2)", "(max)", or empty.
 	Length   string
 	Nullable bool
 	Identity bool
 	Computed bool
 }
 
-// Index is one non-primary index, folded from the one-row-per-column shape a
-// catalog returns.
+// Index is one non-primary index.
 type Index struct {
 	Name    string
 	Unique  bool
 	Columns []string
 }
 
-// ForeignKey is one declared foreign key column. The index writes no foreign
-// key graph — declared keys are rare enough in practice that joins are naming
-// convention — but a table's own keys ride along in its column file and in its
-// fingerprint.
+// ForeignKey is one declared foreign key column.
 type ForeignKey struct {
 	Column     string
 	References string
@@ -42,25 +36,18 @@ type Param struct {
 }
 
 // Structure is everything fetched about one object beyond its manifest row.
-// Which fields are populated follows from the kind. The zero Structure is valid
-// for an object nothing was fetched for.
+// Which fields are populated follows from the kind.
 type Structure struct {
 	Columns     []Column
 	PrimaryKey  []string
 	ForeignKeys []ForeignKey
 	Indexes     []Index
 	Parameters  []Param
-	// Definition is a module body — the text a view, procedure or function
-	// fingerprints over.
-	Definition string
-	// Target is what a synonym points at.
-	Target string
+	Definition  string
+	Target      string
 }
 
-// MaxDefinition caps one module body, so a single pathological body cannot
-// decide the size of a fetch batch or of a file on disk. The prompt cap applied
-// later is lower on purpose, so the stored copy stays the fuller one.
-//
-// It lives here rather than beside an engine because both the engine that
-// applies it and the writer that reports a body was cut need to agree on it.
+// MaxDefinition caps one module body so a pathological body cannot decide the
+// size of a fetch batch. It lives here because the engine that applies it and
+// the writer that reports a cut body must agree on it.
 const MaxDefinition = 50000

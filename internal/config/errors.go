@@ -8,7 +8,6 @@ import (
 // Kind names one of the namespaces a lookup can miss.
 type Kind string
 
-// The namespaces config.yml holds.
 const (
 	KindConnection Kind = "connection"
 	KindBackend    Kind = "backend"
@@ -46,8 +45,7 @@ func (e *InvalidError) Error() string {
 	}
 }
 
-// InUseError reports a name a profile still binds. Removal refuses rather than
-// leaving that profile bound to something gone.
+// InUseError reports a name a profile still binds.
 type InUseError struct {
 	Kind Kind
 	Name string

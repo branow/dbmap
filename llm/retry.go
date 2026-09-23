@@ -16,14 +16,12 @@ const (
 	DefaultElapsed    = 2 * time.Minute
 )
 
-// classAttempts tightens the cap where more attempts never help: a schema
-// failure sometimes lands on the second try and never on the third.
+// classAttempts tightens the cap where more attempts never help.
 var classAttempts = map[Class]int{
 	ClassSchema: 2,
 }
 
-// RetryConfig configures [WithRetry]. The zero value is usable and means the
-// defaults above.
+// RetryConfig configures [WithRetry]. The zero value means the defaults above.
 type RetryConfig struct {
 	// Attempts caps total attempts including the first. 0 means
 	// [DefaultAttempts].
@@ -36,25 +34,24 @@ type RetryConfig struct {
 	// MaxBackoff caps a single delay. 0 means [DefaultMaxBackoff].
 	MaxBackoff time.Duration
 
-	// Elapsed caps the total wall clock spent across all attempts, including
-	// waiting. 0 means [DefaultElapsed].
+	// Elapsed caps total wall clock across all attempts. 0 means
+	// [DefaultElapsed].
 	Elapsed time.Duration
 
 	// Jitter returns a value in [0, d). nil means full jitter over a shared
-	// source; a test injects a deterministic one.
+	// source.
 	Jitter func(d time.Duration) time.Duration
 
-	// Sleep waits, or returns the context's error. nil means a real timer; a
-	// test injects a recorder to assert delays without spending them.
+	// Sleep waits, or returns the context's error. nil means a real timer.
 	Sleep func(ctx context.Context, d time.Duration) error
 
 	// Now reads the clock for the elapsed cap. nil means time.Now.
 	Now func() time.Time
 }
 
-// WithRetry retries the classes marked retryable in this package, backing off
-// exponentially with full jitter, honoring a provider's Retry-After, and
-// stopping at whichever of the attempt and elapsed caps comes first.
+// WithRetry retries the classes marked retryable, backing off exponentially
+// with full jitter, honoring Retry-After, and stopping at whichever of the
+// attempt and elapsed caps comes first.
 func WithRetry(next Client, cfg RetryConfig) Client {
 	if cfg.Attempts <= 0 {
 		cfg.Attempts = DefaultAttempts
@@ -113,7 +110,6 @@ func (r *retrier) Complete(ctx context.Context, req Request) (*Response, error) 
 	}
 }
 
-// attempts is the configured cap, tightened by classAttempts.
 func (r *retrier) attempts(class Class) int {
 	capped, ok := classAttempts[class]
 	if ok && capped < r.cfg.Attempts {
@@ -122,8 +118,8 @@ func (r *retrier) attempts(class Class) int {
 	return r.cfg.Attempts
 }
 
-// delay is the wait before the next attempt: the provider's own Retry-After
-// when it gave one, otherwise full jitter over a doubling window.
+// delay is the provider's own Retry-After when it gave one, otherwise full
+// jitter over a doubling window.
 func (r *retrier) delay(attempt int, err error) time.Duration {
 	var e *Error
 	if errors.As(err, &e) && e.RetryAfter > 0 {

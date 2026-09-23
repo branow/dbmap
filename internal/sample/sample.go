@@ -1,15 +1,6 @@
 // Package sample reads the first rows of a table for the describer, and decides
-// what may be read at all.
-//
-// Two rules shape everything here, and both exist because an earlier attempt at
-// this work overloaded a server: the projection is planned before anything is
-// sent, so a person's column is never read and a table of nothing but such
-// columns is never queried at all; and the run is ordered complete-tables-first,
-// so a capped run spends its budget on the lookup tables that ARE their own
-// value domains rather than on the first rows of a huge log.
-//
-// Sampled values are transient describer input. They never reach the index,
-// never enter a fingerprint, and nothing here persists one.
+// what may be read at all. Sampled values are transient describer input and are
+// never persisted.
 package sample
 
 import (
@@ -22,26 +13,22 @@ import (
 	"github.com/branow/dbmap/internal/fingerprint"
 )
 
-// Fetcher is the half of an engine this package uses, narrow enough that every
-// test here runs against a fake with no database behind it.
+// Fetcher is the half of an engine this package uses.
 type Fetcher interface {
 	Sample(ctx context.Context, conn engine.Conn, table engine.Table, n int) (catalog.Sample, error)
 	Health(ctx context.Context, conn engine.Conn) (engine.Health, error)
 }
 
-// Logger reports what a run skipped. A sample that could not be read is not a
-// reason to abandon a build, but it is never silent either.
+// Logger reports what a run skipped.
 type Logger interface {
 	Warn(message string)
 }
 
 // Options configure one sampling run.
 type Options struct {
-	// Rows is how many rows to read per table. Zero means fingerprint.SampleRows,
-	// which is the depth the describer is calibrated for.
+	// Rows per table; zero means fingerprint.SampleRows.
 	Rows int
-	// Limit caps how many tables are sampled at all. Zero means no cap. A
-	// capped run is the case Order exists for.
+	// Limit caps how many tables are sampled; zero means no cap.
 	Limit  int
 	Logger Logger
 }
@@ -53,10 +40,8 @@ func (o Options) rows() int {
 	return o.Rows
 }
 
-// Order sorts plans complete-tables-first: a table read in full has its whole
-// value domain captured with no DISTINCT scan, where the front rows of a huge
-// table say almost nothing. Within a group the smaller table comes first and
-// ties break on key, so a run does not depend on map order.
+// Order sorts plans complete-tables-first, then smallest first, then by key so
+// a run never depends on map order.
 func Order(plans []Plan, rows map[string]int64) []Plan {
 	ordered := make([]Plan, len(plans))
 	copy(ordered, plans)
@@ -74,9 +59,8 @@ func Order(plans []Plan, rows map[string]int64) []Plan {
 	return ordered
 }
 
-// Plans projects every table entry and drops the ones nothing may be read from.
-// A table whose every column is withheld never becomes a plan, so it can never
-// reach a server.
+// Plans projects every table entry and drops the ones nothing may be read from,
+// so such a table is never queried at all.
 func Plans(entries []catalog.Entry) []Plan {
 	var plans []Plan
 	for _, entry := range entries {
@@ -92,13 +76,9 @@ func Plans(entries []catalog.Entry) []Plan {
 	return plans
 }
 
-// All samples the tables in entries, in value-domain-first order, keyed by
-// object.
-//
-// Health is rechecked before every table because the server's headroom changes
-// during a run, and an unreadable reading halts it: not seeing the floor is not
-// the same as being above it. One table that fails to sample is logged and
-// skipped; a server saying it has no room stops everything.
+// All samples the tables in entries, keyed by object. Health is rechecked
+// before every table, and an unreadable reading halts the run: not seeing the
+// floor is not the same as being above it.
 func All(
 	ctx context.Context,
 	fetcher Fetcher,
@@ -146,8 +126,7 @@ func warn(logger Logger, message string) {
 }
 
 // Render turns a sample into the compact block the describer reads. Withheld
-// columns are named rather than omitted: hiding their existence misleads the
-// describer about the table's shape, which is worse than seeing fewer values.
+// columns are named rather than omitted, or the describer misreads the shape.
 func Render(s catalog.Sample) string {
 	if len(s.Columns) == 0 && len(s.Withheld) == 0 {
 		return ""
@@ -166,7 +145,6 @@ func Render(s catalog.Sample) string {
 	return out.String()
 }
 
-// capCells trims every cell to CellChars.
 func capCells(row []string) []string {
 	out := make([]string, len(row))
 	for i, cell := range row {

@@ -9,21 +9,18 @@ import (
 	"github.com/branow/dbmap/internal/catalog"
 )
 
-// MaxDefinition caps one module body on the way out of the database. It is
-// catalog's constant because the writer has to agree with the engine about when
-// a body was cut.
+// MaxDefinition caps one module body leaving the database. It is catalog's
+// constant because the writer and the engine must agree on when a body was cut.
 const MaxDefinition = catalog.MaxDefinition
 
-// ModuleBatch is how many objects one body fetch asks for. See DESIGN.md.
+// ModuleBatch is how many objects one body fetch asks for.
 const ModuleBatch = 40
 
 // Query is the one path from an engine to a database, and the only place the
-// safety contract is applied. The order is load-bearing: prove the statement is
-// a read and refuse before a connection is used, then apply the engine's
-// resource guard, then run it inside the session the guard asked for.
+// safety contract is applied.
 //
-// Rows come back as strings so that parsing is a pure function over cells,
-// testable with no database behind it. A NULL reads as the empty string.
+// Rows come back as strings so parsing is a pure function over cells. A NULL
+// reads as the empty string.
 func Query(
 	ctx context.Context,
 	conn Conn,
@@ -40,7 +37,6 @@ func Query(
 	return collect(rows)
 }
 
-// collect drains a cursor into string cells.
 func collect(rows Rows) ([][]string, error) {
 	columns, err := rows.Columns()
 	if err != nil {
@@ -97,8 +93,7 @@ func Placeholders(prefix string, n int) string {
 	return out.String()
 }
 
-// Args widens a key slice into the driver argument slice a placeholder list
-// expects.
+// Args widens a key slice into driver arguments.
 func Args(keys []string) []any {
 	args := make([]any, len(keys))
 	for i, key := range keys {

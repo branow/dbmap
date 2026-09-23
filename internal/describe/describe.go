@@ -9,22 +9,19 @@ import (
 	"github.com/branow/dbmap/llm"
 )
 
-// Budget sizes one batch. Objects are wildly uneven, so a batch is measured in
-// prompt characters first and object count second.
+// Batches are sized by prompt characters, then by count.
 const (
 	BatchChars = 40000
 	BatchMax   = 12
 )
 
-// sentenceField is load-bearing wording. The field is named `sentence` and its
-// schema text is an ORDER, not a noun phrase: called `description` with a noun
-// phrase, every model tested returned a description of the field instead of an
-// answer. Do not soften either; a test fails if you do.
+// The field is `sentence`, never `description`, and its text is an ORDER, not
+// a noun phrase: models fill a `description` field with
+// a description of the field instead. A test pins both.
 const sentenceField = "Put the finished sentence here verbatim. Never describe what the sentence would say."
 
 // Schema is the structured output one batch must return. Answers carry the
-// object name so they can be matched BY NAME rather than by position: a model
-// that reorders its reply must still land every sentence on the right object.
+// object name because they are matched by name, never by position.
 var Schema = json.RawMessage(`{
   "type": "object",
   "additionalProperties": false,
@@ -56,7 +53,6 @@ var Schema = json.RawMessage(`{
   }
 }`)
 
-// answer is one object's reply.
 type answer struct {
 	Name     string `json:"name"`
 	Sentence string `json:"sentence"`
@@ -67,16 +63,13 @@ type reply struct {
 	Objects []answer `json:"objects"`
 }
 
-// Result is what a run produced: a sentence per object it could describe, the
-// lookup tables it identified, and what it could not do.
+// Result is what a run produced.
 type Result struct {
 	Sentences map[string]string
 	Lookups   map[string]bool
-	// Missing lists objects the model skipped, reported rather than left blank:
-	// a blank description reads as a described object with nothing to say.
+	// Missing lists objects the model skipped, reported rather than left blank.
 	Missing []string
-	// Failed lists batches that errored. A failed batch is skipped, never
-	// fatal: a partial index beats none.
+	// Failed lists batches that errored; a failed batch is skipped, never fatal.
 	Failed []error
 	Usage  llm.Usage
 }
@@ -131,9 +124,8 @@ func Prepare(inputs []Input) ([]Item, error) {
 	return items, nil
 }
 
-// Batch groups items by cost. An item over the character budget goes alone
-// rather than being dropped — an object too big to share a call is still an
-// object that needs describing.
+// Batch groups items by cost. An item over the budget goes alone rather than
+// being dropped.
 func Batch(items []Item, chars, max int) [][]Item {
 	var batches [][]Item
 	var current []Item
@@ -167,9 +159,8 @@ func BatchPrompt(items []Item) string {
 	return strings.Join(blocks, "\n\n")
 }
 
-// All describes every input it can, in batches. A failing batch is logged,
-// skipped and reported on Result rather than aborting the run: a partial index
-// is worth more than none.
+// All describes every input it can, in batches. A failing batch is reported on
+// Result rather than aborting the run.
 func All(ctx context.Context, client llm.Client, inputs []Input, opts Options) (Result, error) {
 	result := Result{Sentences: map[string]string{}, Lookups: map[string]bool{}}
 

@@ -10,15 +10,13 @@ import (
 
 const tab = "\t"
 
-// breakers are the characters that would end a cell or row early. A
-// model-written description can contain any of them, so every cell passes
-// through here.
+// breakers neutralise characters that would end a cell or row early; a
+// model-written description can contain any of them.
 var breakers = strings.NewReplacer("\t", " ", "\n", " ", "\r", " ")
 
 func clean(value string) string { return strings.TrimSpace(breakers.Replace(value)) }
 
-// TSV renders a header and its rows. The header is written as given; every
-// other cell is cleaned.
+// TSV renders a header and its rows. Only the rows are cleaned.
 func TSV(header []string, rows [][]string) string {
 	var out strings.Builder
 	out.WriteString(strings.Join(header, tab))
@@ -47,8 +45,7 @@ func Size(kb int64) string {
 	}
 }
 
-// Params renders a call signature inline — "@CustomerID int, @Since datetime" —
-// minus the return row a catalog emits with an empty name.
+// Params renders a call signature inline: "@CustomerID int, @Since datetime".
 func Params(entry catalog.Entry) string {
 	var rendered []string
 	for _, p := range entry.Structure.Parameters {
@@ -64,8 +61,8 @@ func Params(entry catalog.Entry) string {
 	return strings.Join(rendered, ", ")
 }
 
-// Returns lifts a function's return type out of its parameters. A
-// table-valued function has no return row, and returns a table.
+// Returns lifts a function's return type out of its parameters; a table-valued
+// function has no return row.
 func Returns(entry catalog.Entry) string {
 	for _, p := range entry.Structure.Parameters {
 		if p.Name == catalog.Returns {

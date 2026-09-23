@@ -8,12 +8,9 @@ import (
 	"github.com/zalando/go-keyring"
 )
 
-// Every platform but macOS reaches its credential store through go-keyring:
-// wincred on Windows, secret-service on Linux, and macOS too when cgo is off.
-//
-// The allow decision cannot be honoured here - go-keyring exposes no way to
-// refuse a dialog - but these backends do not tie an item to the calling
-// binary's code identity, so they never raise the dialog that motivated it.
+// go-keyring exposes no way to refuse a dialog, so allow is ignored here; these
+// backends do not tie an item to the calling binary's code identity, so they
+// never raise the dialog that motivated it.
 func itemGet(service, account string, _ ui) (string, error) {
 	value, err := keyring.Get(service, account)
 	if errors.Is(err, keyring.ErrNotFound) {

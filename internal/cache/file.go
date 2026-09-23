@@ -13,19 +13,17 @@ import (
 	"github.com/branow/dbmap/internal/catalog"
 )
 
-// The cache is the user's private working copy of their own schema: no
-// credential in it, but nobody else's business either.
+// The cache is the user's private working copy of their own schema.
 const (
 	dirPerm  fs.FileMode = 0o700
 	filePerm fs.FileMode = 0o600
 )
 
-// tempPattern names the file an interrupted write leaves behind, dotted and
-// without a .json suffix so it can never be mistaken for an entry.
+// tempPattern is dotted and unsuffixed, so a half-written file is never
+// mistaken for an entry.
 const tempPattern = ".partial-*"
 
-// envelope wraps every payload with what a read must check before trusting the
-// bytes. A file failing any check is a miss, never a value.
+// envelope wraps every payload with what a read checks before trusting it.
 type envelope struct {
 	Artifact string          `json:"artifact"`
 	Key      string          `json:"key,omitempty"`
@@ -34,8 +32,8 @@ type envelope struct {
 	Payload  json.RawMessage `json:"payload"`
 }
 
-// read loads one entry. Absent, unparsable or failing its checksum all report a
-// miss with no error: all three mean the value must be fetched again.
+// read loads one entry. Absent, unparsable and failing checksum all report a
+// miss with no error.
 func read(path string) (envelope, bool, error) {
 	data, err := os.ReadFile(path)
 	if errors.Is(err, fs.ErrNotExist) {
@@ -54,8 +52,8 @@ func read(path string) (envelope, bool, error) {
 	return entry, true, nil
 }
 
-// write stores one entry atomically: a flushed temporary file is renamed over
-// the target, so a reader sees the old entry or the new one, never a prefix.
+// write stores one entry atomically: a flushed temp file renamed over the
+// target, so a reader sees the old entry or the new one, never a prefix.
 func write(path string, entry envelope) error {
 	fail := func(op Op, at string, err error) error {
 		return &StoreError{Op: op, Artifact: entry.Artifact, Key: entry.Key, Path: at, Err: err}
@@ -89,8 +87,8 @@ func write(path string, entry envelope) error {
 	return nil
 }
 
-// writeAll writes, flushes and closes, so the rename that follows cannot
-// publish an entry whose contents are still in a buffer.
+// writeAll flushes before closing, so the rename cannot publish an entry still
+// sitting in a buffer.
 func writeAll(file *os.File, data []byte) error {
 	if _, err := file.Write(data); err != nil {
 		file.Close()
@@ -103,10 +101,9 @@ func writeAll(file *os.File, data []byte) error {
 	return file.Close()
 }
 
-// payloadSum digests normalised JSON, not the on-disk bytes. Entries are
-// pretty-printed on the way out, so hashing the bytes as they appear compared an
-// indented payload against the compact one the write digested: every entry read
-// as corrupt and the cache never hit.
+// payloadSum digests normalised JSON, never the on-disk bytes: entries are
+// pretty-printed on the way out, so hashing as written made every read look
+// corrupt and the cache never hit.
 func payloadSum(payload []byte) string {
 	var compact bytes.Buffer
 	if json.Compact(&compact, payload) != nil {
@@ -115,7 +112,6 @@ func payloadSum(payload []byte) string {
 	return checksum(compact.Bytes())
 }
 
-// checksum is the digest over exactly the bytes given.
 func checksum(data []byte) string {
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:])

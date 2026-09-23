@@ -1,19 +1,12 @@
-// Package redact keeps sensitive values out of the index. It holds two rule
-// tables and the engines that walk them: one strips secrets out of a module
-// body, the other names the columns a sample must never read.
-//
-// Both are pure and stand alone — no filesystem, no database, no clock — so a
-// body can be redacted the moment it arrives, before it is written to the cache
-// and long before it reaches a prompt.
-//
-// Nothing here throws away what it found: Text reports a count per class, so a
-// build summary can surface a real credential rather than swallow it.
+// Package redact keeps sensitive values out of the index: one rule table strips
+// secrets out of a module body, the other names the columns a sample must never
+// read. Both are pure, so a body is redacted the moment it arrives.
 package redact
 
 import "sort"
 
-// Counts is how many values of each class a pass stripped. A map, so a class
-// that never fired is absent and a summary lists only what was found.
+// Counts is how many values of each class a pass stripped; a class that never
+// fired is absent.
 type Counts map[Class]int
 
 // Total is every hit across every class.
@@ -35,7 +28,7 @@ func (c Counts) Classes() []Class {
 	return classes
 }
 
-// Add returns the sum of two tallies, leaving both operands untouched.
+// Add returns the sum of two tallies, leaving both untouched.
 func (c Counts) Add(other Counts) Counts {
 	if len(c) == 0 && len(other) == 0 {
 		return nil
@@ -49,10 +42,8 @@ func (c Counts) Add(other Counts) Counts {
 	return sum
 }
 
-// Body is text that has been through the redactor, plus the tally of what came
-// out. Its text is unexported and Text is its only constructor, so a Body
-// cannot hold anything the rules did not see — which is what lets the cache
-// demand one and be structurally unable to store a raw body.
+// Body is redacted text plus the tally of what came out. Text is its only
+// constructor, so demanding a Body is how the cache cannot store a raw one.
 type Body struct {
 	text   string
 	counts Counts
@@ -64,8 +55,7 @@ func (b Body) String() string { return b.text }
 // Counts is the tally of values stripped out of this body, per class.
 func (b Body) Counts() Counts { return b.counts }
 
-// Text runs the secret table over one body and returns the cleaned text with
-// its tally.
+// Text runs the secret table over one body.
 func Text(body string) Body {
 	out := Body{text: body}
 	for _, rule := range Rules {

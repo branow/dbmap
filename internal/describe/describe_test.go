@@ -133,8 +133,12 @@ func TestTheReasonForTheFieldNameIsRecordedInSource(t *testing.T) {
 		}
 		return true
 	})
+	// Collapse whitespace first: a comment group joins its lines with newlines,
+	// so a phrase that happens to wrap would otherwise fail this test and send
+	// the reader looking for a deletion that never happened.
+	prose := strings.Join(strings.Fields(text.String()), " ")
 	for _, required := range []string{"description of the field", "sentence"} {
-		if !strings.Contains(text.String(), required) {
+		if !strings.Contains(prose, required) {
 			t.Fatalf("the comment explaining the field name lost %q", required)
 		}
 	}

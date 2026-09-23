@@ -9,9 +9,7 @@ import (
 )
 
 // modulesQuery fetches the bodies of the named objects. Postgres stores a
-// parsed tree rather than definition text, so a body comes from pg_get_viewdef
-// or pg_get_functiondef and arrives normalised — which suits the fingerprint,
-// since a reformatting deployment tool then does not read as an edit.
+// parsed tree, so a body is re-rendered and arrives normalised.
 func modulesQuery(n int) string {
 	list := engine.Placeholders("$", n)
 	limit := strconv.Itoa(engine.MaxDefinition)
@@ -29,9 +27,8 @@ FROM routine r
 WHERE r.schema || '.' || r.name IN (` + list + `)`
 }
 
-// parseModules reads body rows into a map keyed by object key. An empty body is
-// omitted rather than stored, and redaction happens here because this is the
-// moment a body arrives.
+// parseModules reads body rows, redacting on arrival. An empty body is omitted
+// rather than stored.
 func parseModules(rows [][]string) map[string]redact.Body {
 	bodies := make(map[string]redact.Body, len(rows))
 	for _, row := range rows {
@@ -43,8 +40,7 @@ func parseModules(rows [][]string) map[string]redact.Body {
 	return bodies
 }
 
-// Modules fetches module bodies in batches, asking for room between each. A
-// body is redacted on arrival, before it can be cached or reach a prompt.
+// Modules fetches module bodies in batches, asking for room between each.
 func (e *Engine) Modules(
 	ctx context.Context,
 	conn engine.Conn,

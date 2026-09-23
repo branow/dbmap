@@ -1,13 +1,6 @@
-// Package fingerprint decides what "changed" means for each kind of object.
-//
-// Staleness is two-tier because two signals guard two very different costs. A
-// modify signal gates FETCH: free and never misses a change, but over-reports.
-// A content fingerprint gates DESCRIBE, which is an LLM call per object, so the
-// exact check guards the expensive stage and the loose one the cheap stage.
-//
-// A module fingerprints over its definition; a table has none, so it
-// fingerprints over the structure a reader would need plus its sample depth.
-// Sample row VALUES are deliberately absent: they change on every run against a
+// Package fingerprint decides what "changed" means for each kind of object: a
+// module hashes its definition, a table its structure plus its sample depth.
+// Sample row VALUES are deliberately absent — they move on every run against a
 // live database and would leave every table permanently dirty.
 package fingerprint
 
@@ -21,18 +14,15 @@ import (
 	"github.com/branow/dbmap/internal/catalog"
 )
 
-// SampleRows is how many rows the describer is sent, and so the row count above
-// which a table growing tells it nothing new. 25 is chosen from the measured
-// row-count distribution (see docs/DESIGN.md).
+// SampleRows is how many rows the describer is sent; 25 comes from the measured
+// row-count distribution (docs/DESIGN.md).
 const SampleRows = 25
 
-// digits keeps 64 bits of the hash: collision-proof enough for a few thousand
-// objects, short enough to sit in a TSV row a human reads.
+// digits keeps 64 bits of the hash, short enough to sit in a TSV row.
 const digits = 16
 
-// SampleDepth is how many rows the describer actually gets to see. Below
-// SampleRows growth changes what the model reads; at or above it, growth
-// changes nothing, which is what keeps a growing table from redescribing.
+// SampleDepth is how many rows the describer gets to see, so a table growing
+// past SampleRows does not redescribe.
 func SampleDepth(rows int64) int64 {
 	if rows < 0 {
 		return 0
@@ -49,9 +39,8 @@ func Sum(text string) string {
 	return hex.EncodeToString(sum[:])[:digits]
 }
 
-// Normalize strips line endings, per-line trailing whitespace and surrounding
-// blank space, so a deployment tool rewriting a file to CRLF does not read as
-// an edit.
+// Normalize strips line endings and trailing whitespace, so a deployment tool
+// rewriting a file to CRLF does not read as an edit.
 func Normalize(definition string) string {
 	lines := strings.Split(strings.ReplaceAll(definition, "\r\n", "\n"), "\n")
 	for i, line := range lines {
@@ -63,9 +52,8 @@ func Normalize(definition string) string {
 // Module fingerprints a view, procedure or function over its body.
 func Module(definition string) string { return Sum(Normalize(definition)) }
 
-// CanonicalTable is the exact text a table's fingerprint is taken over. Built
-// as explicit lines rather than by hashing the struct, so the hash cannot move
-// when an unrelated field is added to Structure.
+// CanonicalTable is the exact text a table's fingerprint is taken over. Written
+// out line by line so adding a field to Structure cannot move the hash.
 func CanonicalTable(object catalog.Object, structure catalog.Structure) string {
 	lines := make([]string, 0, len(structure.Columns)+len(structure.Indexes)+4)
 	for _, c := range structure.Columns {
@@ -122,8 +110,7 @@ var fingerprinters = map[catalog.Kind]func(catalog.Object, catalog.Structure) st
 }
 
 // Of returns the content fingerprint for one object. A kind with no rule is
-// refused rather than guessed at: a wrong hash would either redescribe an
-// object on every build or never describe it again.
+// refused: a guessed hash either redescribes forever or never again.
 func Of(object catalog.Object, structure catalog.Structure) (string, error) {
 	fn, ok := fingerprinters[object.Kind]
 	if !ok {
