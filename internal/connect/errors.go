@@ -163,3 +163,16 @@ func (e *CrossRealmError) spn() string {
 	}
 	return "MSSQLSvc/" + e.host() + ":1433"
 }
+
+// RejectedError reports a server refusing something definitively: a login it
+// will not accept, a database that is not there. It exists so setup can tell a
+// verdict from an outage — an unclassified failure reads as "try again later",
+// which is the wrong advice for a wrong password.
+type RejectedError struct {
+	// Subject is what the server refused, in the user's terms.
+	Subject string
+}
+
+func (e *RejectedError) Error() string {
+	return "the server refused " + e.Subject
+}

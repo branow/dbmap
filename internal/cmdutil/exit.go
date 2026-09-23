@@ -67,6 +67,7 @@ var rules = []struct {
 	{ExitValidation, as[*connect.UnsupportedError]},
 
 	{ExitAuth, as[*AuthError]},
+	{ExitAuth, as[*connect.RejectedError]},
 	{ExitAuth, as[*connect.CrossRealmError]},
 	{ExitAuth, as[*connect.CredentialCacheError]},
 	{ExitAuth, as[*connect.KerberosError]},
