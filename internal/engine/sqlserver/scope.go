@@ -6,15 +6,11 @@ import (
 	"github.com/branow/dbmap/internal/catalog"
 )
 
-// Type is a sys.objects type code. Nothing above the engine boundary sees one.
+// Type is a sys.objects type code.
 type Type string
 
-// Types is the one place a SQL Server type code becomes a catalog kind, as data
-// rather than a switch so a new code is a new row.
-//
-// Triggers are deliberately absent: in practice they are generated changelog
-// writers carrying nothing a reader of the tracked table lacks, so the index
-// records a trigger count on the parent and describes none of them.
+// Types is where a SQL Server type code becomes a catalog kind. Triggers are
+// deliberately absent; the parent records a trigger count instead.
 var Types = []struct {
 	Type Type
 	Kind catalog.Kind
@@ -30,10 +26,9 @@ var Types = []struct {
 	{"SN", catalog.Synonym},  // synonym
 }
 
-// ExcludedSchemas are dropped before anything is fetched. `cdc` is almost
-// entirely auto-generated Change Data Capture functions, two per tracked table
-// and carrying nothing a reader of that table lacks, so excluding it removes a
-// large share of the describe workload at almost no cost.
+// ExcludedSchemas are dropped before anything is fetched. `cdc` is generated
+// Change Data Capture functions, two per tracked table, carrying nothing the
+// tracked table lacks.
 var ExcludedSchemas = []string{"cdc"}
 
 var kinds = func() map[Type]catalog.Kind {
@@ -44,15 +39,14 @@ var kinds = func() map[Type]catalog.Kind {
 	return byType
 }()
 
-// kindOf maps a type code onto a catalog kind. An unrecognised code is reported
-// rather than guessed at, so it cannot slip into the index unclassified.
+// kindOf maps a type code onto a catalog kind, reporting an unrecognised one
+// rather than guessing.
 func kindOf(code string) (catalog.Kind, bool) {
 	kind, ok := kinds[Type(strings.TrimSpace(code))]
 	return kind, ok
 }
 
-// typeList renders the type codes for an IN predicate, from this package's own
-// constants rather than user input.
+// typeList renders the type codes for an IN predicate.
 func typeList() string {
 	quoted := make([]string, len(Types))
 	for i, row := range Types {
@@ -70,8 +64,7 @@ func schemaList() string {
 	return strings.Join(quoted, ",")
 }
 
-// inScope is the predicate every catalog query shares: nothing Microsoft
-// shipped, nothing outside the type table, nothing in an excluded schema.
+// inScope is the predicate every catalog query shares.
 func inScope() string {
 	return "o.is_ms_shipped = 0 AND o.type IN (" + typeList() +
 		") AND s.name NOT IN (" + schemaList() + ")"

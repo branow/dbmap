@@ -6,8 +6,7 @@ import (
 )
 
 // WithUsage accumulates every successful call's usage into the caller's totals.
-// total must outlive the client; nil leaves the client unwrapped. The counter
-// is mutex-guarded because [WithConcurrency] runs calls in parallel.
+// total must outlive the client; nil leaves the client unwrapped.
 func WithUsage(next Client, total *Usage) Client {
 	if total == nil {
 		return next

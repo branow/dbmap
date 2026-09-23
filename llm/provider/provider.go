@@ -1,6 +1,5 @@
 // Package provider maps an llm.Config onto one of the provider packages. It is
 // separate because the providers import llm, so llm cannot import them back.
-// Nothing registers globally: the table below is the whole registry.
 package provider
 
 import (
@@ -12,8 +11,7 @@ import (
 	"github.com/branow/dbmap/llm/openai"
 )
 
-// constructors is the provider table, walked by New. Adding a provider is
-// adding a row.
+// constructors is the whole registry; nothing registers globally.
 var constructors = map[string]func(llm.Config) (llm.Client, error){
 	anthropic.Name: func(cfg llm.Config) (llm.Client, error) {
 		return anthropic.New(anthropic.Config{
@@ -50,7 +48,7 @@ func New(cfg llm.Config) (llm.Client, error) {
 	return construct(cfg)
 }
 
-// Names lists the supported providers, sorted, for help text and validation.
+// Names lists the supported providers, sorted.
 func Names() []string {
 	names := make([]string, 0, len(constructors))
 	for name := range constructors {

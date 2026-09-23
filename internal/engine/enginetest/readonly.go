@@ -6,23 +6,16 @@ import (
 	"strings"
 )
 
-// writes matches a statement that could change something. It is deliberately
-// broad: a false positive costs one test edit, a false negative ships a query
-// nobody noticed writing.
+// writes is deliberately broad: a false positive costs one test edit, a false
+// negative ships a query nobody noticed writing.
 var writes = regexp.MustCompile(`(?i)\b(insert|update|delete|merge|into|create|alter|drop|` +
 	`truncate|grant|revoke|deny|backup|restore|dbcc|exec|execute|shutdown|kill|waitfor|` +
 	`openrowset|opendatasource|openquery|xp_cmdshell|sp_configure|vacuum|copy|call)\b`)
 
 var opensRead = regexp.MustCompile(`(?i)^\s*(select|with)\b`)
 
-// ReadOnly reports whether a statement an engine builds is a read.
-//
-// This is a test-time assertion over this tool's own SQL, not a runtime gate.
-// Every query is a constant in an engine package, so checking it at run time
-// would be the program auditing strings it wrote itself; checking it in a test
-// catches the same mistake at the only moment it can still be fixed. What stops
-// a write at run time is the account's permissions and, where the engine offers
-// one, a read-only transaction.
+// ReadOnly reports whether a statement an engine builds is a read. Test-time
+// only: at run time the account's permissions stop a write.
 func ReadOnly(statement string) error {
 	if !opensRead.MatchString(statement) {
 		return fmt.Errorf("does not open with SELECT or WITH: %s", first(statement))

@@ -5,12 +5,10 @@ import (
 	"fmt"
 )
 
-// Policy decides what may hold a secret when the OS keychain cannot.
+// Policy decides what may hold a secret when the OS keychain cannot. Never is
+// the default: a keychain failure is a hard error, never a quiet write to disk.
 type Policy string
 
-// The policies. Never is the default: a keychain failure is a hard error, never
-// a quiet write to disk, because a transient failure would otherwise persist a
-// database password permanently.
 const (
 	PolicyNever     Policy = "never"
 	PolicyPlaintext Policy = "plaintext"
@@ -18,24 +16,21 @@ const (
 
 // Options describe the store stack to assemble.
 type Options struct {
-	// Policy selects whether the plaintext file participates at all.
 	Policy Policy
-	// Service is the keychain service; empty means the dbmap default.
+	// Service empty means the dbmap default.
 	Service string
-	// File is the plaintext store's path, used only under PolicyPlaintext.
+	// File is used only under PolicyPlaintext.
 	File string
-	// Env reads the environment; nil means the process environment.
+	// Env nil means the process environment.
 	Env func(string) string
 	// Interactive says a human is watching a terminal and may answer the
-	// keychain's authorization dialog. The zero value is false, so a store
-	// nobody configured fails fast instead of hanging a script, a CI job or a
-	// background process on a dialog nobody can see.
+	// keychain's dialog. False by default: a dialog nobody can see would hang
+	// a script or a CI job forever.
 	Interactive bool
 }
 
-// chain is the assembled stack: the environment answers first so a headless run
-// needs no keychain, then the keychain, then - only under the plaintext policy
-// - the file.
+// chain is the assembled stack: environment, then keychain, then - only under
+// the plaintext policy - the file.
 type chain struct {
 	env      *Env
 	keychain *Keychain
@@ -62,9 +57,7 @@ func New(o Options) (Store, error) {
 	}
 }
 
-// Get asks the environment, then the keychain, then the file. A keychain that
-// is present but empty still lets the file answer, because that is where an
-// opted-in user's secret was written.
+// Get asks the environment, then the keychain, then the file.
 func (c *chain) Get(key string) (Secret, error) {
 	if secret, err := c.env.Get(key); err == nil {
 		return secret, nil
@@ -89,8 +82,8 @@ func (c *chain) Get(key string) (Secret, error) {
 	return Secret{}, err
 }
 
-// Set writes to the keychain, and falls back to the file only when the policy
-// opted in. Under the default policy a keychain failure ends the command.
+// Set falls back to the file only when the policy opted in; otherwise a
+// keychain failure ends the command.
 func (c *chain) Set(key string, secret Secret) error {
 	err := c.keychain.Set(key, secret)
 	if err == nil || c.file == nil {
@@ -99,8 +92,7 @@ func (c *chain) Set(key string, secret Secret) error {
 	return c.file.Set(key, secret)
 }
 
-// Delete removes the key from every store that can hold it, so a removed entry
-// leaves no secret behind.
+// Delete removes the key from every store that can hold it.
 func (c *chain) Delete(key string) error {
 	err := c.keychain.Delete(key)
 	if c.file == nil {

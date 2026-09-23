@@ -1,11 +1,7 @@
 // Package describe turns a fetched object into one sentence, using a model with
-// no tools and everything it needs in the prompt.
-//
-// Two decisions in here were expensive to learn and are pinned by tests as well
-// as comments; read them before changing any wording. The output field is named
-// `sentence`, never `description` (see sentenceField in describe.go). And the
-// instruction is verb-first with worked examples, because listing requirements
-// invites a small model to restate the list instead of answering it.
+// no tools and everything it needs in the prompt. Two wordings here are pinned
+// by tests: the output field name (see sentenceField in describe.go) and the
+// verb-first instruction below.
 package describe
 
 import (
@@ -15,42 +11,37 @@ import (
 	"github.com/branow/dbmap/internal/catalog"
 )
 
-// BodyChars caps a module body on its way into a prompt; the cache deliberately
-// keeps more, so the stored copy is always the fuller one. A procedure is not
-// summarisable from its opening, so this is a cap, never a preview.
+// BodyChars caps a module body on its way into a prompt; the cache keeps more.
 const BodyChars = 16000
 
-// Truncated marks a body the prompt could not carry whole, so the model reads
-// it as a fragment rather than treating the missing tail as absent.
+// Truncated marks a body the prompt could not carry whole, so the model does
+// not read the missing tail as absent.
 const Truncated = "\n-- truncated"
 
-// verbFirst is the instruction that stops a small model restating the task.
-// Naming the failure mode is what fixed it; the per-kind examples do the rest.
+// verbFirst stops a small model restating the task; naming the failure mode is
+// what fixed it, and the per-kind examples do the rest.
 const verbFirst = "Answer in one sentence that starts with a verb, present tense, under 25 words.\n" +
 	"Do not restate this instruction, do not write the word summary or analysis, " +
 	"and do not repeat the object name."
 
-// Prompt builds the prompt for one object. Prompts live in a table keyed by
-// kind, so a new kind is a row rather than a branch.
+// Prompt builds the prompt for one object.
 type Prompt func(Input) string
 
 // Input is everything a prompt may read about one object.
 type Input struct {
-	Entry catalog.Entry
-	// Database names the database the object lives in, for context only.
+	Entry    catalog.Entry
 	Database string
 	// Definition is the object's body, already redacted. Empty for a table.
 	Definition string
-	// Sample is the rendered sample block, empty when the table was not
-	// sampled or nothing in it could be read.
+	// Sample is the rendered sample block, empty when nothing was readable.
 	Sample string
 }
 
 // Key is the name answers are matched back by.
 func (i Input) Key() string { return i.Entry.Key() }
 
-// Prompts is the whole prompt policy, one row per kind. A synonym has no row:
-// it is indexed for its target, not for a generated sentence about it.
+// Prompts is the prompt policy, one row per kind. A synonym has no row: it is
+// indexed for its target.
 var Prompts = map[catalog.Kind]Prompt{
 	catalog.Table: func(in Input) string {
 		parts := []string{
@@ -147,9 +138,8 @@ func (e *UnpromptedKindError) Error() string {
 	return fmt.Sprintf("no prompt defined for kind %q", string(e.Kind))
 }
 
-// Body renders a definition for a prompt, capped and marked when it is cut. An
-// absent body is stated rather than left blank: a model shown nothing where a
-// body should be will invent one.
+// Body renders a definition for a prompt, capped and marked when cut. An absent
+// body is stated, never left blank: a model shown nothing there invents one.
 func Body(definition string) string {
 	text := strings.TrimSpace(definition)
 	if text == "" {

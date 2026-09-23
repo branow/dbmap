@@ -1,5 +1,5 @@
 // Package output renders command results. A command builds records and never
-// decides how they look; -o picks the writer.
+// decides how they look.
 package output
 
 import (
@@ -10,10 +10,9 @@ import (
 	"strings"
 )
 
-// Format names a rendering, validated once where the flag is read.
+// Format names a rendering.
 type Format string
 
-// The formats dbmap ships. Adding one means adding a writer to writers.
 const (
 	Table Format = "table"
 	JSON  Format = "json"
@@ -40,7 +39,6 @@ type Field struct {
 // Record is one result row.
 type Record []Field
 
-// Get returns the value of a named field.
 func (r Record) Get(name string) (any, bool) {
 	for _, f := range r {
 		if f.Name == name {
@@ -76,14 +74,10 @@ func (r Record) MarshalJSON() ([]byte, error) {
 
 // Writer renders results in one format. Every command speaks only this.
 type Writer interface {
-	// List renders zero or more records sharing a shape.
 	List(recs []Record) error
-	// Show renders a single record.
 	Show(rec Record) error
-	// Value renders one scalar, for a lookup such as `config get`.
 	Value(v any) error
-	// Note renders a status line. A machine-readable format drops it: a status
-	// line is not part of the document.
+	// Note renders a status line. A machine-readable format drops it.
 	Note(text string) error
 }
 
@@ -102,8 +96,7 @@ func New(f Format, out io.Writer) Writer {
 	return build(out)
 }
 
-// ParseFormat validates a format name from a flag, an env var or the config
-// file, all of which are external input.
+// ParseFormat validates a format name.
 func ParseFormat(s string) (Format, error) {
 	if _, ok := writers[Format(s)]; ok {
 		return Format(s), nil

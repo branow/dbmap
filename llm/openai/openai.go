@@ -1,9 +1,7 @@
 // Package openai talks to any OpenAI-compatible chat completions endpoint
 // through the official openai-go, constraining the answer with
-// response_format: json_schema and strict: true.
-//
-// BaseURL also covers local models: Ollama, vLLM, OpenRouter and LiteLLM all
-// speak this API, so none needs a provider of its own.
+// response_format: json_schema and strict: true. BaseURL also covers local
+// models: Ollama, vLLM, OpenRouter and LiteLLM all speak this API.
 package openai
 
 import (
@@ -19,7 +17,7 @@ import (
 	"github.com/branow/dbmap/llm"
 )
 
-// Name is the provider's identity, used in cache keys and logs.
+// Name is the provider's identity.
 const Name = "openai"
 
 // schemaName labels the response format, which the API requires named.
@@ -28,8 +26,7 @@ const schemaName = "answer"
 // Config constructs a client. The host resolves the API key; this package reads
 // no file, environment variable or keychain.
 type Config struct {
-	// APIKey is required unless BaseURL points at a local endpoint, which
-	// typically authenticates nothing.
+	// APIKey is required unless BaseURL points at a local endpoint.
 	APIKey string
 	// BaseURL overrides the API endpoint. Empty means the hosted OpenAI API.
 	BaseURL string
@@ -39,8 +36,8 @@ type Config struct {
 	MaxTokens int
 }
 
-// New returns a client for an OpenAI-compatible endpoint. SDK retries are off
-// because retrying is llm.WithRetry's job and two layers would multiply.
+// New returns a client for an OpenAI-compatible endpoint. SDK retries are off:
+// retrying is llm.WithRetry's job and two layers would multiply.
 func New(cfg Config) (llm.Client, error) {
 	if cfg.APIKey == "" && cfg.BaseURL == "" {
 		return nil, &llm.Error{Class: llm.ClassAuth, Provider: Name, Detail: "no api key"}
@@ -145,8 +142,8 @@ func (p *provider) Complete(ctx context.Context, req llm.Request) (*llm.Response
 	}, nil
 }
 
-// fault maps an SDK failure onto an llm class. An HTTP status decides it;
-// anything without one is a transport failure, which is transient.
+// fault maps an SDK failure onto an llm class; anything without an HTTP status
+// is a transport failure.
 func fault(err error, model string) error {
 	var api *sdk.Error
 	if errors.As(err, &api) {

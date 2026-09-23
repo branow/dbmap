@@ -1,6 +1,5 @@
-// Package iostreams owns a command's streams: where it reads and writes,
-// whether those are a terminal, and how a missing value is asked for. Commands
-// never touch os.Stdin/os.Stdout, so every one of them is testable with buffers.
+// Package iostreams owns a command's streams. Commands never touch
+// os.Stdin/os.Stdout, so every one of them is testable with buffers.
 package iostreams
 
 import (
@@ -15,17 +14,14 @@ import (
 	"golang.org/x/term"
 )
 
-// ErrCancelled reports input that ended before an answer arrived: the user
-// aborting, not a failure.
+// ErrCancelled reports input that ended before an answer arrived.
 var ErrCancelled = errors.New("input cancelled")
 
-// ErrNoInput reports a value that had to be prompted for while prompting is
-// unavailable (no terminal, or --no-input), so a command fails instead of
-// blocking on a stream nobody will write to.
+// ErrNoInput reports a prompt needed while prompting is unavailable, so a
+// command fails instead of blocking on a stream nobody will write to.
 var ErrNoInput = errors.New("input disabled")
 
-// IOStreams carries the three streams and what depends on them: terminal
-// detection, color, and prompting.
+// IOStreams carries the three streams and what depends on them.
 type IOStreams struct {
 	In     io.Reader
 	Out    io.Writer
@@ -40,8 +36,7 @@ type IOStreams struct {
 	readPassword func(fd int) ([]byte, error)
 }
 
-// System wires the streams to the process, detecting the terminal once because
-// that is a property of the process, not of a call.
+// System wires the streams to the process, detecting the terminal once.
 func System() *IOStreams {
 	s := &IOStreams{
 		In:           os.Stdin,
@@ -58,7 +53,7 @@ func System() *IOStreams {
 }
 
 // Test returns buffer-backed streams and their buffers. Neither reports a
-// terminal until a test says otherwise, which is the shape CI runs in.
+// terminal until a test says otherwise.
 func Test() (*IOStreams, *bytes.Buffer, *bytes.Buffer, *bytes.Buffer) {
 	in, out, errOut := &bytes.Buffer{}, &bytes.Buffer{}, &bytes.Buffer{}
 	s := &IOStreams{In: in, Out: out, ErrOut: errOut, in: bufio.NewReader(in)}
@@ -70,29 +65,22 @@ func Test() (*IOStreams, *bytes.Buffer, *bytes.Buffer, *bytes.Buffer) {
 	return s, in, out, errOut
 }
 
-// IsStdinTTY reports whether input comes from a terminal.
 func (s *IOStreams) IsStdinTTY() bool { return s.inTTY }
 
-// IsStdoutTTY reports whether output goes to a terminal.
 func (s *IOStreams) IsStdoutTTY() bool { return s.outTTY }
 
-// SetStdinTTY overrides input terminal detection.
 func (s *IOStreams) SetStdinTTY(v bool) { s.inTTY = v }
 
-// SetStdoutTTY overrides output terminal detection.
 func (s *IOStreams) SetStdoutTTY(v bool) { s.outTTY = v }
 
-// ColorEnabled reports whether escape sequences may be written.
 func (s *IOStreams) ColorEnabled() bool { return s.color }
 
-// SetColorEnabled turns color on or off.
 func (s *IOStreams) SetColorEnabled(v bool) { s.color = v }
 
 // SetNeverPrompt disables prompting for the whole process (--no-input).
 func (s *IOStreams) SetNeverPrompt(v bool) { s.neverPrompt = v }
 
-// CanPrompt reports whether a question may be asked: both ends must be a
-// terminal, and prompting must not be disabled.
+// CanPrompt reports whether a question may be asked.
 func (s *IOStreams) CanPrompt() bool {
 	return s.inTTY && s.outTTY && !s.neverPrompt
 }
@@ -101,8 +89,7 @@ func (s *IOStreams) CanPrompt() bool {
 // color is off, so callers never branch on the setting.
 func (s *IOStreams) Color() *Palette { return &Palette{enabled: s.color} }
 
-// Prompt asks for a value and returns the answer, or def when it is empty. It
-// never blocks when prompting is unavailable.
+// Prompt asks for a value and returns the answer, or def when it is empty.
 func (s *IOStreams) Prompt(label, def string) (string, error) {
 	if !s.CanPrompt() {
 		return "", fmt.Errorf("%w: %s", ErrNoInput, label)
@@ -122,8 +109,7 @@ func (s *IOStreams) Prompt(label, def string) (string, error) {
 	return line, nil
 }
 
-// PromptPassword asks for a secret without echoing it: the value is returned
-// and never written to any stream.
+// PromptPassword asks for a secret without echoing it.
 func (s *IOStreams) PromptPassword(label string) (string, error) {
 	if !s.CanPrompt() {
 		return "", fmt.Errorf("%w: %s", ErrNoInput, label)
@@ -160,8 +146,8 @@ func (s *IOStreams) Confirm(label string, def bool) (bool, error) {
 	}
 }
 
-// ReadAll drains the input stream and trims the trailing newline. It backs the
-// --password-stdin flags, which keep a secret out of a process argument.
+// ReadAll drains the input stream and trims the trailing newline. It backs
+// --password-stdin, which keeps a secret out of a process argument.
 func (s *IOStreams) ReadAll() (string, error) {
 	raw, err := io.ReadAll(s.in)
 	if err != nil {

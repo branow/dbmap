@@ -5,30 +5,27 @@ import (
 	"regexp"
 )
 
-// The floors below which a build stops. See DESIGN.md for the measurements.
+// The floors below which a build stops.
 const (
 	MinAvailableGB = 2.0
 	MaxWaiting     = 5
 )
 
-// Reading is one health sample, in engine-neutral terms. MemoryVisible marks
-// the engines that cannot report memory at all (Postgres, to an ordinary role),
-// so a memory condition is skipped rather than read as zero free bytes and
-// halting a build that was never in danger.
+// Reading is one health sample, in engine-neutral terms. MemoryVisible false
+// (Postgres, to an ordinary role) means memory conditions are skipped rather
+// than read as zero free bytes.
 type Reading struct {
 	MemoryVisible bool
 	AvailableGB   float64
-	// State is the server's own wording for its memory situation, so it is
-	// matched for "low" rather than compared.
+	// State is the server's own wording, so it is matched for "low" rather than
+	// compared.
 	State     string
 	MemoryLow bool
-	// Waiting is how many queries are queued for a resource they cannot get:
-	// a memory grant on SQL Server, a lock on Postgres.
+	// Waiting is how many queries are queued for a resource they cannot get.
 	Waiting int
 }
 
 // Stop is one condition that halts a build, with the sentence it halts under.
-// Conditions are data walked in order, so a new signal is a new row.
 type Stop struct {
 	Name   string
 	When   func(Reading) bool
@@ -70,12 +67,10 @@ var StopConditions = []Stop{
 
 // Health is what a build asks before every stage and every batch.
 type Health struct {
-	// OK is whether the next batch may be sent, false whenever the answer is not
-	// a clear yes.
+	// OK is false whenever the answer is not a clear yes.
 	OK bool
-	// Known is whether the server answered at all. Not being able to see the
-	// floor is not the same as being above it, so an account that cannot read
-	// the health views reports unknown, never healthy.
+	// Known is whether the server answered at all: not seeing the floor is not
+	// the same as being above it.
 	Known   bool
 	Reason  string
 	Reading Reading
@@ -85,7 +80,7 @@ type Health struct {
 const Unreadable = "server memory state could not be read"
 
 // Classify turns a reading into a verdict. A nil reading is unknown, never
-// healthy, which is the whole point of separating Known from OK.
+// healthy.
 func Classify(reading *Reading) Health {
 	if reading == nil {
 		return Health{OK: false, Known: false, Reason: Unreadable}
@@ -103,7 +98,7 @@ type UnhealthyError struct {
 	Stage  string
 	Reason string
 	// Known distinguishes a server that said it has no room from one that would
-	// not say. Both stop the build; only the first is the server's decision.
+	// not say.
 	Known bool
 }
 
@@ -112,7 +107,7 @@ func (e *UnhealthyError) Error() string {
 }
 
 // Assert stops a stage unless the server has room. Every caller consumes Health
-// through it, so "unknown is not healthy" is enforced in one place.
+// through it, so "unknown is not healthy" lives in one place.
 func Assert(health Health, stage string) error {
 	if health.OK {
 		return nil

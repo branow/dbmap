@@ -7,8 +7,7 @@ import (
 	"text/tabwriter"
 )
 
-// table renders for a person: aligned columns for a list, aligned key/value
-// pairs for a single record.
+// table renders for a person.
 type table struct{ out io.Writer }
 
 func (t *table) List(recs []Record) error {
@@ -49,8 +48,7 @@ func (t *table) Note(text string) error {
 	return err
 }
 
-// cell flattens a value to one column. A nil is blank rather than "<nil>": a
-// table is read by a person.
+// cell flattens a value to one column; nil is blank rather than "<nil>".
 func cell(v any) string {
 	switch value := v.(type) {
 	case nil:

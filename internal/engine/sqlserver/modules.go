@@ -8,8 +8,7 @@ import (
 	"github.com/branow/dbmap/internal/redact"
 )
 
-// modulesQuery fetches the bodies of the named objects. Keys ride as parameters
-// rather than interpolated text.
+// modulesQuery fetches the bodies of the named objects.
 func modulesQuery(n int) string {
 	return `SELECT s.name + '.' + o.name, LEFT(m.definition, ` +
 		strconv.Itoa(engine.MaxDefinition) + `)
@@ -20,10 +19,8 @@ WHERE ` + inScope() + `
   AND s.name + '.' + o.name IN (` + engine.Placeholders("@p", n) + `)`
 }
 
-// parseModules reads body rows into a map keyed by object key. An empty body is
-// omitted rather than stored, so a later stage can tell "no body" from "blank".
-// Redaction happens here, the moment a body arrives, so nothing downstream can
-// hold an unredacted one.
+// parseModules reads body rows, redacting on arrival. An empty body is omitted
+// rather than stored, so a later stage can tell "no body" from "blank".
 func parseModules(rows [][]string) map[string]redact.Body {
 	bodies := make(map[string]redact.Body, len(rows))
 	for _, row := range rows {
@@ -35,10 +32,7 @@ func parseModules(rows [][]string) map[string]redact.Body {
 	return bodies
 }
 
-// Modules fetches module bodies in batches, asking for room between each so a
-// run that began on a healthy server still stops if it stops being one.
-// Procedure bodies are where credentials turn up in practice, so each body is
-// redacted on arrival and carries the tally of what was found.
+// Modules fetches module bodies in batches, asking for room between each.
 func (e *Engine) Modules(
 	ctx context.Context,
 	conn engine.Conn,

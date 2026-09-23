@@ -9,19 +9,16 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// FileName is the plaintext store's file; the repository's ignore rules deny it
-// by name.
+// FileName is the plaintext store's file; the ignore rules deny it by name.
 const FileName = "credentials.yml"
 
-// File stores secrets in a 0600 file next to the config. It exists only for
-// machines with no usable keychain and is reached only when the policy
-// explicitly opts in: nothing falls back to it silently.
+// File stores secrets in a 0600 file next to the config. Nothing falls back to
+// it silently: it is reached only when the policy explicitly opts in.
 type File struct{ Path string }
 
-// NewFile returns a plaintext store at a path.
 func NewFile(path string) *File { return &File{Path: path} }
 
-// FilePath reports the default plaintext store location, beside config.yml.
+// FilePath reports the default plaintext store location.
 func FilePath(configPath string) string {
 	return filepath.Join(filepath.Dir(configPath), FileName)
 }

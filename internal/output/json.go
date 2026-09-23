@@ -6,8 +6,7 @@ import (
 	"sort"
 )
 
-// jsonw renders for a program: one JSON document per call, indented so a piped
-// result is still readable.
+// jsonw renders one indented JSON document per call.
 type jsonw struct{ out io.Writer }
 
 func (j *jsonw) List(recs []Record) error {

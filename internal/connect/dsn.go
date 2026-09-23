@@ -8,38 +8,32 @@ import (
 	"github.com/branow/dbmap/internal/config"
 )
 
-// Application is the name this tool reports to a server, so a DBA reading a
-// session list can see what is reading their catalog.
+// Application is the name this tool reports to a server's session list.
 const Application = "dbmap"
 
 // Timeouts, in seconds. Login is generous because a Kerberos exchange against a
-// distant KDC is not fast.
+// distant KDC is slow.
 const (
 	LoginTimeout = 30
 	DialTimeout  = 15
 )
 
-// dsn is one engine's data source name, built in memory and never written
-// anywhere. A distinct type, so a value carrying a password cannot be passed
-// where an ordinary string is expected.
+// dsn is one engine's data source name, carrying the password. A distinct type,
+// so it cannot be passed where an ordinary string is expected.
 type dsn string
 
-// String is the DSN as a driver wants it. It is deliberately the only way to
-// read the value, so every use of it is visible at a call site.
+// String is the DSN as a driver wants it, and the only way to read the value.
 func (d dsn) String() string { return string(d) }
 
 // sqlserverDSN builds a SQL Server data source name. ApplicationIntent,
 // MultiSubnetFailover and authenticator are applied after the user's params so
-// no params entry can turn them off: the first routes a catalog read to a
-// readable secondary, the second stops an availability-group listener hanging
-// instead of failing over, and the third follows the auth mode.
+// no params entry can turn them off.
 func sqlserverDSN(cfg config.Connection, secret string, env environment) (dsn, error) {
 	query := url.Values{}
 	query.Set("app name", Application)
 	query.Set("encrypt", "true")
-	// Transport encryption is always on; verifying the chain is opt-in through
-	// params, because an internal certificate authority is the norm and
-	// defaulting verification on fails with an error a user cannot act on.
+	// Encryption is always on; verifying the chain is opt-in through params,
+	// because an internal certificate authority is the norm here.
 	query.Set("TrustServerCertificate", "true")
 	query.Set("connection timeout", strconv.Itoa(LoginTimeout))
 	query.Set("dial timeout", strconv.Itoa(DialTimeout))
@@ -78,9 +72,8 @@ func sqlserverDSN(cfg config.Connection, secret string, env environment) (dsn, e
 	}).String()), nil
 }
 
-// postgresDSN builds a Postgres data source name. sslmode=require encrypts the
-// transport without demanding a verifiable chain, the same trade sqlserverDSN
-// makes; a deployment with a real chain sets params.sslmode to verify-full.
+// postgresDSN builds a Postgres data source name. sslmode=require encrypts
+// without demanding a verifiable chain; params.sslmode can ask for verify-full.
 func postgresDSN(cfg config.Connection, secret string, env environment) (dsn, error) {
 	query := url.Values{}
 	query.Set("application_name", Application)
@@ -121,8 +114,7 @@ func postgresDSN(cfg config.Connection, secret string, env environment) (dsn, er
 	}).String()), nil
 }
 
-// hostPort renders the address, filling in the engine's own default port when
-// the connection names none.
+// hostPort renders the address, defaulting the port.
 func hostPort(cfg config.Connection, fallback int) string {
 	port := cfg.Port
 	if port == 0 {

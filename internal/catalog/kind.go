@@ -1,15 +1,12 @@
 // Package catalog is the engine-agnostic vocabulary every other domain package
-// speaks: what an indexed object is, what was fetched about it, and what the
-// previous build recorded. It imports nothing and knows no SQL — an engine maps
-// its own catalog type codes onto these types at the boundary.
+// speaks. It imports nothing and knows no SQL.
 package catalog
 
 // Kind is what an indexed object is.
 type Kind string
 
-// The kinds the index covers. Triggers are deliberately absent: they run close
-// to one per table and are usually generated, so the parent table records a
-// trigger count instead of describing each one.
+// The kinds the index covers. Triggers are deliberately absent; a table records
+// a trigger count instead.
 const (
 	Table     Kind = "table"
 	View      Kind = "view"
@@ -18,15 +15,12 @@ const (
 	Synonym   Kind = "synonym"
 )
 
-// Spec is one row of the kind table: everything the pipeline needs to know
-// about a kind, so no stage branches on a kind itself.
+// Spec is one row of the kind table, so no stage branches on a kind itself.
 type Spec struct {
-	Kind Kind
-	// Describe marks a kind worth a generated sentence. A synonym is indexed
-	// for the target it points at, not for a sentence about it.
+	Kind     Kind
 	Describe bool
-	// Module marks a kind that carries a body, and therefore fingerprints over
-	// its definition rather than over its structure.
+	// Module marks a kind that carries a body, and so fingerprints over its
+	// definition rather than over its structure.
 	Module bool
 }
 
@@ -48,8 +42,7 @@ var specs = func() map[Kind]Spec {
 }()
 
 // Lookup returns the kind table row for k, and whether the index covers k at
-// all. An unrecognised kind is reported rather than guessed at, so a type an
-// engine starts returning cannot slip into the index unclassified.
+// all, so an unrecognised kind is reported rather than guessed at.
 func Lookup(k Kind) (Spec, bool) {
 	spec, ok := specs[k]
 	return spec, ok

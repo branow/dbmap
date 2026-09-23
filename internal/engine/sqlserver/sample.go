@@ -9,16 +9,11 @@ import (
 	"github.com/branow/dbmap/internal/engine"
 )
 
-// CellChars caps one sampled cell: a describer needs the shape of a value, not
-// all of it.
+// CellChars caps one sampled cell.
 const CellChars = 200
 
-// sampleQuery reads the first n rows of one table.
-//
-// TOP (n) must never gain an ORDER BY: a sort ranks the whole table before
-// returning anything, while without one the server stops reading after n rows.
-// The projection is explicit rather than SELECT * because the caller has
-// already dropped the columns that must not be read.
+// sampleQuery reads the first n rows of one table. TOP (n) must never gain an
+// ORDER BY: a sort ranks the whole table before returning anything.
 func (e *Engine) sampleQuery(table engine.Table, n int) string {
 	cells := make([]string, len(table.Columns))
 	for i, column := range table.Columns {
@@ -30,8 +25,8 @@ func (e *Engine) sampleQuery(table engine.Table, n int) string {
 		e.Quote(table.Schema) + "." + e.Quote(table.Name)
 }
 
-// Sample reads the first n rows of one table. An empty projection — every
-// column withheld as personal data, say — opens no query at all.
+// Sample reads the first n rows of one table. An empty projection opens no
+// query at all.
 func (e *Engine) Sample(
 	ctx context.Context,
 	conn engine.Conn,

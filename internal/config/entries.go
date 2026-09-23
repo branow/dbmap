@@ -49,8 +49,7 @@ func (c *Config) SetBackend(name string, entry Backend) error {
 	return nil
 }
 
-// SetProfile defines or redefines a profile. It must bind names that exist,
-// and it does not become current.
+// SetProfile defines or redefines a profile; it does not become current.
 func (c *Config) SetProfile(name string, entry Profile) error {
 	if err := validateName(KindProfile, name); err != nil {
 		return err
@@ -66,8 +65,7 @@ func (c *Config) SetProfile(name string, entry Profile) error {
 	return nil
 }
 
-// RemoveConnection drops a connection, refusing while a profile still binds it
-// unless the caller forces the removal.
+// RemoveConnection refuses while a profile still binds it, unless forced.
 func (c *Config) RemoveConnection(name string, force bool) error {
 	if _, err := c.Connection(name); err != nil {
 		return err

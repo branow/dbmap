@@ -9,7 +9,6 @@ import (
 )
 
 // source is one metadata query and how to fold its rows into a structure.
-// Sources are data so adding one is a row rather than a branch.
 type source struct {
 	Name string
 	SQL  func() string
@@ -19,7 +18,7 @@ type source struct {
 }
 
 // parsed is a structure under construction. Index rows arrive one per column,
-// so they are held flat until every row is in and then folded.
+// so they are held flat until every row is in.
 type parsed struct {
 	structure catalog.Structure
 	indexRows []indexRow
@@ -32,8 +31,8 @@ type indexRow struct {
 	column  string
 }
 
-// sources is the structure stage, reading pg_catalog only so no user data page
-// is touched. Postgres has no synonyms, hence one source fewer than SQL Server.
+// sources is the structure stage, reading pg_catalog only. Postgres has no
+// synonyms, hence one source fewer than SQL Server.
 var sources = []source{
 	{
 		Name:  "columns",
@@ -153,8 +152,7 @@ ORDER BY 1, 2, 6`
 }
 
 // splitType separates what format_type renders into a type name and its width.
-// The parenthetical is not always at the end — "timestamp(3) without time zone"
-// puts it in the middle — so it is lifted out rather than chopped off a suffix.
+// The parenthetical is not always at the end: "timestamp(3) without time zone".
 func splitType(rendered string) (kind, length string) {
 	open := strings.Index(rendered, "(")
 	if open < 0 {
@@ -170,7 +168,6 @@ func splitType(rendered string) (kind, length string) {
 	return kind, length
 }
 
-// fold applies one source's rows to the structures under construction.
 func fold(target map[string]*parsed, source source, rows [][]string) {
 	for _, raw := range rows {
 		if len(raw) < source.Width {
@@ -188,7 +185,7 @@ func fold(target map[string]*parsed, source source, rows [][]string) {
 }
 
 // foldIndexes turns one-row-per-column index rows into one entry per index and
-// lifts the primary key out, because a reader wants it named separately.
+// lifts the primary key out.
 func foldIndexes(rows []indexRow) ([]string, []catalog.Index) {
 	var order []string
 	byName := map[string]*catalog.Index{}
@@ -220,7 +217,7 @@ func foldIndexes(rows []indexRow) ([]string, []catalog.Index) {
 }
 
 // Structure runs every source against one database, asking for room between
-// each, and returns a structure per object key.
+// each.
 func (e *Engine) Structure(
 	ctx context.Context,
 	conn engine.Conn,

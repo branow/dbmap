@@ -7,7 +7,7 @@ import (
 )
 
 // Class is the failure classification every provider maps its native errors
-// onto, so that retry and exit-code decisions never string-match prose.
+// onto, so retry and exit-code decisions never string-match prose.
 type Class int
 
 // The six classes. Their retry semantics live in the table below.
@@ -16,17 +16,13 @@ const (
 	ClassAuth Class = iota + 1
 	// ClassRateLimited means a quota or rate limit was hit.
 	ClassRateLimited
-	// ClassUnavailable means the provider failed transiently: 5xx, a dropped
-	// connection, a timeout.
+	// ClassUnavailable means the provider failed transiently.
 	ClassUnavailable
-	// ClassRefused means the model declined to answer. The caller reports the
-	// object rather than retrying it.
+	// ClassRefused means the model declined to answer.
 	ClassRefused
-	// ClassSchema means the answer did not satisfy the schema, or was not JSON
-	// at all.
+	// ClassSchema means the answer was not JSON, or not schema-conforming.
 	ClassSchema
-	// ClassBadRequest means the request itself is wrong: prompt too long, bad
-	// model id, malformed schema.
+	// ClassBadRequest means the request itself is wrong.
 	ClassBadRequest
 )
 
@@ -40,8 +36,7 @@ var (
 	ErrBadRequest  = errors.New("llm: request rejected")
 )
 
-// sentinels is the only place the class and sentinel vocabularies are tied
-// together.
+// sentinels ties the class and sentinel vocabularies together.
 var sentinels = map[Class]error{
 	ClassAuth:        ErrAuth,
 	ClassRateLimited: ErrRateLimited,
@@ -51,9 +46,8 @@ var sentinels = map[Class]error{
 	ClassBadRequest:  ErrBadRequest,
 }
 
-// retryable is the classification the retry middleware walks. ClassSchema is
-// retryable but tightly capped: a second attempt sometimes lands, a third never
-// does.
+// retryable is what the retry middleware walks. ClassSchema is retryable but
+// tightly capped: a second attempt sometimes lands, a third never does.
 var retryable = map[Class]bool{
 	ClassAuth:        false,
 	ClassRateLimited: true,
@@ -66,7 +60,7 @@ var retryable = map[Class]bool{
 // Retryable reports whether a failure of this class is worth another attempt.
 func (c Class) Retryable() bool { return retryable[c] }
 
-// Error renders the class name, which is also the sentinel's message.
+// Error renders the class name.
 func (c Class) String() string {
 	if s, ok := sentinels[c]; ok {
 		return s.Error()
@@ -77,21 +71,16 @@ func (c Class) String() string {
 // Error is the structured failure every provider returns. Context lives on
 // fields, never baked into the message, so the caller decides what to show.
 type Error struct {
-	// Class drives every retry and exit-code decision.
-	Class Class
-	// Provider is the client's Name at the point of failure.
+	Class    Class
 	Provider string
-	// Model is the model that was asked, when one was chosen.
-	Model string
-	// Status is the HTTP status when the failure came from an HTTP call, 0
-	// otherwise.
+	Model    string
+	// Status is the HTTP status, 0 when the failure was not an HTTP one.
 	Status int
 	// RetryAfter is the delay the provider asked for, 0 when it asked for none.
 	RetryAfter time.Duration
-	// Detail is the provider's own message, carried verbatim for reporting.
+	// Detail is the provider's own message, verbatim.
 	Detail string
-	// Err is the underlying failure, when there was one to keep.
-	Err error
+	Err    error
 }
 
 // Error renders the class and the provider's own message when there is one.
@@ -102,8 +91,7 @@ func (e *Error) Error() string {
 	return e.Class.String() + ": " + e.Detail
 }
 
-// Unwrap exposes the provider's error, so a context cancellation stays visible
-// through the classification.
+// Unwrap exposes the provider's error, so a context cancellation stays visible.
 func (e *Error) Unwrap() error { return e.Err }
 
 // Is matches this error against its class sentinel.
@@ -112,8 +100,7 @@ func (e *Error) Is(target error) bool { return sentinels[e.Class] == target }
 // Retryable reports whether this failure is worth another attempt.
 func (e *Error) Retryable() bool { return e.Class.Retryable() }
 
-// Classify returns the class of any error, and false when the error did not
-// come from this module.
+// Classify returns an error's class, and false when it is not from this module.
 func Classify(err error) (Class, bool) {
 	var e *Error
 	if errors.As(err, &e) {
@@ -122,14 +109,14 @@ func Classify(err error) (Class, bool) {
 	return 0, false
 }
 
-// Retryable reports whether an arbitrary error is worth another attempt. An
-// error from outside this module never is.
+// Retryable reports whether an error is worth another attempt. One from outside
+// this module never is.
 func Retryable(err error) bool {
 	class, ok := Classify(err)
 	return ok && class.Retryable()
 }
 
-// statuses maps an HTTP status onto a class, shared by both HTTP providers.
+// statuses is shared by both HTTP providers.
 var statuses = map[int]Class{
 	http.StatusBadRequest:            ClassBadRequest,
 	http.StatusUnauthorized:          ClassAuth,
@@ -153,8 +140,7 @@ func ClassifyStatus(status int) Class {
 	return ClassBadRequest
 }
 
-// ParseRetryAfter reads a Retry-After header value. Delay-seconds only: the
-// HTTP-date form is rare on these APIs and a wrong parse beats no hint.
+// ParseRetryAfter reads a Retry-After header value, delay-seconds form only.
 func ParseRetryAfter(value string) time.Duration {
 	if value == "" {
 		return 0

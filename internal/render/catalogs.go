@@ -1,21 +1,5 @@
 // Package render writes the index files an agent reads, and reads the next
 // build's staleness state back out of them.
-//
-// Shape, per environment and database:
-//
-//	tables.tsv                     one row per table: size, trigger count
-//	views.tsv                      one row per view
-//	procedures.tsv                 one row per procedure, parameters inline
-//	functions.tsv                  one row per function, return type inline
-//	synonyms.tsv                   one row per synonym and what it points at
-//	columns/<schema>.<name>.tsv    per table and view: every column, the
-//	                               primary key and the indexes
-//
-// Every catalog carries the modify signal and the fingerprint beside the
-// description, so the next build reads its staleness state straight out of the
-// files it wrote and no second file can drift out of step. Nothing derived is
-// stored. Only tables and views get a column file: a procedure's parameters fit
-// on one line, and the index does not reproduce a body.
 package render
 
 import (
@@ -27,21 +11,18 @@ import (
 // Trailer is the staleness tail every catalog row ends with.
 var Trailer = []string{"modified", "fingerprint", "description"}
 
-// Catalog is one row of the catalog table: which file a kind is written to,
-// the columns specific to that kind, and how to read them off an entry.
+// Catalog describes how one kind is written: its file, the headings between the
+// name and the shared trailer, and how to read those off an entry.
 type Catalog struct {
-	File string
-	Kind catalog.Kind
-	// Facts are the column headings between the name and the shared trailer.
-	Facts []string
-	// Values reads those facts off an entry, in Facts order.
+	File   string
+	Kind   catalog.Kind
+	Facts  []string
 	Values func(catalog.Entry) []string
-	// Detail marks a kind whose columns are worth a file of their own.
+	// Detail marks a kind that also gets a per-object column file.
 	Detail bool
 }
 
-// Catalogs is the output shape as data. Adding a kind is a row here, not a
-// branch somewhere.
+// Catalogs is the output shape as data: adding a kind is a row here.
 var Catalogs = []Catalog{
 	{
 		File:   "tables.tsv",
@@ -107,8 +88,7 @@ func row(c Catalog, entry catalog.Entry) []string {
 	return append(cells, entry.Object.Modified.String(), entry.Fingerprint, entry.Description)
 }
 
-// rowsIndex is where a row count sits in a catalog's row, or -1 for a catalog
-// that stores none.
+// rowsIndex is where a row count sits in a catalog's row, or -1 if it has none.
 func rowsIndex(c Catalog) int {
 	for i, fact := range c.Facts {
 		if fact == "rows" {

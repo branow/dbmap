@@ -8,18 +8,14 @@ type Entry struct {
 	Description string
 }
 
-// Key is the name this entry is indexed by.
 func (e Entry) Key() string { return e.Object.Key() }
 
 // State is what the previous build recorded about one object, read back out of
-// the catalogs that build wrote. There is deliberately no sidecar state file: a
-// parallel file drifts out of step with the index beside it.
+// the catalogs that build wrote rather than from a sidecar file.
 type State struct {
 	Modified    Signal
 	Fingerprint string
 	Description string
-	// Rows lets a table that grew past the depth the describer sees be told from
-	// one that did not. Kinds whose catalog stores no row count read back as
-	// zero, which keeps the sample rule scoped to tables by rule, not accident.
+	// Rows reads back zero for kinds whose catalog stores no row count.
 	Rows int64
 }

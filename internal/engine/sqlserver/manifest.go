@@ -8,19 +8,13 @@ import (
 	"github.com/branow/dbmap/internal/engine"
 )
 
-// manifestColumns is how wide a manifest row is. A shorter row is dropped
-// rather than padded, so a truncated result cannot invent facts.
+// manifestColumns is how wide a manifest row is; a shorter row is dropped.
 const manifestColumns = 7
 
-// manifestQuery lists every in-scope object with the cheap facts the planner
-// versions against.
-//
-// Rows and size come from sys.dm_db_partition_stats, which reads maintained
-// page totals and so costs the same at any table size; index_id < 2 counts heap
-// or clustered rows only, so an indexed table is not counted once per index.
-// modify_date is rendered as ISO 8601 in SQL rather than in Go because it is
-// compared against the string the previous build wrote, and formatting it in
-// two languages is two places to drift.
+// manifestQuery lists every in-scope object with the facts the planner versions
+// against. index_id < 2 counts heap or clustered rows only, so an indexed table
+// is not counted once per index. modify_date is formatted in SQL, not Go: it is
+// compared against the string a previous build wrote, and two formatters drift.
 func manifestQuery() string {
 	return `SELECT s.name, o.name, o.type,
   CONVERT(varchar(19), o.modify_date, 126),
@@ -40,7 +34,7 @@ ORDER BY s.name, o.name`
 }
 
 // parseManifest turns catalog rows into objects, dropping any type the table
-// does not cover rather than guessing a kind for it.
+// does not cover.
 func parseManifest(rows [][]string) []catalog.Object {
 	objects := make([]catalog.Object, 0, len(rows))
 	for _, raw := range rows {
@@ -65,7 +59,6 @@ func parseManifest(rows [][]string) []catalog.Object {
 	return objects
 }
 
-// Manifest fetches the manifest for the database the connection is open on.
 func (e *Engine) Manifest(ctx context.Context, conn engine.Conn) ([]catalog.Object, error) {
 	if err := e.halt(ctx, conn, "the manifest"); err != nil {
 		return nil, err
@@ -77,8 +70,7 @@ func (e *Engine) Manifest(ctx context.Context, conn engine.Conn) ([]catalog.Obje
 	return parseManifest(rows), nil
 }
 
-// number reads a catalog count. Unparseable is zero: a missing page total means
-// no storage, not a failed build.
+// number reads a catalog count; unparseable is zero, not a failed build.
 func number(cell string) int64 {
 	n, err := strconv.ParseInt(cell, 10, 64)
 	if err != nil {

@@ -1,6 +1,4 @@
-// Package cmdutil holds what every command needs and nothing a command does:
-// the Factory, the typed error vocabulary, and the one translation from an
-// error to a process exit code.
+// Package cmdutil holds what every command needs and nothing a command does.
 package cmdutil
 
 import (
@@ -12,8 +10,7 @@ import (
 	"github.com/branow/dbmap/internal/output"
 )
 
-// Flags are the persistent flags after the precedence chain has run. Commands
-// read the resolved values and never re-derive them.
+// Flags are the persistent flags after the precedence chain has run.
 type Flags struct {
 	Profile string
 	Output  output.Format
@@ -22,8 +19,7 @@ type Flags struct {
 	Force   bool
 }
 
-// ConnectionProbe verifies a connection before its settings are stored. Nil
-// means no verification.
+// ConnectionProbe verifies a connection before its settings are stored.
 type ConnectionProbe func(ctx context.Context, name string, entry config.Connection,
 	secret credentials.Secret) error
 
@@ -45,19 +41,17 @@ type Factory struct {
 	Store  credentials.Store
 	Flags  Flags
 	Probes Probes
-	// Env reads the process environment, as a field so nothing in a test can
-	// reach the machine's real variables.
+	// Env is a field so nothing in a test can reach the machine's real
+	// variables.
 	Env func(string) string
 }
 
-// EnvSecret returns the secret the environment already carries for a key: the
-// path that lets a headless run take a credential with no keychain at all.
+// EnvSecret returns the secret the environment already carries for a key.
 func (f *Factory) EnvSecret(key string) (credentials.Secret, bool) {
 	secret, err := credentials.NewEnv(f.Env).Get(key)
 	return secret, err == nil
 }
 
-// Writer returns the output writer for the resolved format.
 func (f *Factory) Writer() output.Writer { return output.New(f.Flags.Output, f.IO.Out) }
 
 // Note writes a status line unless the run is quiet.
@@ -68,8 +62,7 @@ func (f *Factory) Note(text string) error {
 	return f.Writer().Note(text)
 }
 
-// Resolve runs the precedence chain once, from the root command's pre-run, so
-// every command sees the same answer.
+// Resolve runs the precedence chain once, from the root command's pre-run.
 func (f *Factory) Resolve(o config.Overrides) error {
 	format, err := output.ParseFormat(f.Config.Output(o))
 	if err != nil {

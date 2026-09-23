@@ -7,13 +7,12 @@ import (
 )
 
 // store is the fetch cache as the build sees it: every unusable entry is a
-// miss, and an unwritable cache is a warning, not a failed build. With no cache
-// root it misses everything, so no stage below asks whether caching is on.
+// miss and a refused write is a warning, so no stage below asks whether caching
+// is on or whether it worked.
 type store struct {
 	scope  *cache.Scope
 	logger Logger
-	// writable is false for a dry run, which must leave nothing behind
-	// anywhere.
+	// writable is false for a dry run, which leaves nothing behind anywhere.
 	writable bool
 }
 
@@ -54,8 +53,6 @@ func (s store) module(key string, signal catalog.Signal) (cache.Module, bool) {
 	return value, ok
 }
 
-// putStructure stores what the database just returned. The cache is an
-// optimisation, so a refused write is reported and survived.
 func (s store) putStructure(key string, signal catalog.Signal, value catalog.Structure) {
 	if s.scope == nil || !s.writable {
 		return

@@ -1,8 +1,6 @@
-// Package claudecode drives the headless `claude` binary as a pure model.
-//
-// It needs no API key, using the user's existing CLI session, which is the
-// entire reason it exists. The price is that usage comes back mostly zeroed,
-// and this package never fabricates the rest.
+// Package claudecode drives the headless `claude` binary as a pure model. It
+// needs no API key, using the user's existing CLI session; the price is that
+// usage comes back mostly zeroed, and this package never fabricates the rest.
 package claudecode
 
 import (
@@ -17,7 +15,7 @@ import (
 	"github.com/branow/dbmap/llm"
 )
 
-// Name is the provider's identity, used in cache keys and logs.
+// Name is the provider's identity.
 const Name = "claudecode"
 
 // DefaultCommand is the binary looked up on PATH when the config names none.
@@ -48,8 +46,7 @@ type provider struct {
 
 func (p *provider) Name() string { return Name }
 
-// result is the shape of `claude --output-format json`. A field the CLI omits
-// stays zero, which is what Usage should then report.
+// result is the shape of `claude --output-format json`.
 type result struct {
 	Subtype          string          `json:"subtype"`
 	IsError          bool            `json:"is_error"`
@@ -63,8 +60,8 @@ type result struct {
 	} `json:"usage"`
 }
 
-// subtypes maps the CLI's failure vocabulary onto llm classes. Anything
-// unlisted is transient, the alternative being to string-match CLI prose.
+// subtypes maps the CLI's failure vocabulary onto llm classes; anything
+// unlisted is transient.
 var subtypes = map[string]llm.Class{
 	"error_max_turns":        llm.ClassRefused,
 	"error_during_execution": llm.ClassUnavailable,
@@ -76,11 +73,9 @@ func (p *provider) Complete(ctx context.Context, req llm.Request) (*llm.Response
 		model = p.cfg.Model
 	}
 
-	// The schema travels inline because --json-schema takes the schema itself
-	// and answers "not valid JSON" to a path. --allowedTools "" keeps this a
-	// pure model call. There is deliberately no --max-turns: structured output
-	// arrives as a tool call, so a cap cuts the answer off and the run returns
-	// error_max_turns with no structured_output at all.
+	// The schema travels inline: --json-schema takes the schema itself and
+	// rejects a path. No --max-turns: structured output arrives as a tool call,
+	// so capping turns returns error_max_turns with no answer.
 	args := []string{
 		"--print",
 		"--output-format", "json",

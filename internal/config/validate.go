@@ -6,26 +6,23 @@ import (
 	"strconv"
 )
 
-// auths lists which authentication modes each engine accepts. A table walked by
-// the validator, so an engine gains a mode by gaining a row.
+// auths lists which authentication modes each engine accepts.
 var auths = map[Engine][]Auth{
 	SQLServer: {SQLLogin, Kerberos},
 	Postgres:  {SCRAM, Kerberos},
 }
 
-// providers lists the llm providers and whether each needs an api key; one that
-// needs none is never prompted for one.
+// providers lists the llm providers and whether each needs an api key.
 var providers = map[Provider]struct{ NeedsKey bool }{
 	Anthropic:  {NeedsKey: true},
 	OpenAI:     {NeedsKey: true},
 	ClaudeCode: {NeedsKey: false},
 }
 
-// fallbacks lists the secret-storage policies.
 var fallbacks = []Fallback{Never, Plaintext}
 
-// secretless lists the auth modes that carry no password: the ticket or the OS
-// supplies the credential.
+// secretless lists the auth modes where the ticket or the OS supplies the
+// credential.
 var secretless = map[Auth]bool{Kerberos: true}
 
 // name is the shape of every entry name: safe to type, and safe in a keychain
@@ -77,8 +74,8 @@ func NeedsPassword(a Auth) bool { return !secretless[a] }
 // NeedsAPIKey reports whether a provider requires a stored api key.
 func NeedsAPIKey(p Provider) bool { return providers[p].NeedsKey }
 
-// Validate checks the whole file: every entry well formed, every profile
-// binding names that exist. External input is validated once, here.
+// Validate checks every entry is well formed and every profile binds names
+// that exist.
 func (c *Config) Validate() error {
 	for entry, value := range c.Connections {
 		if err := validateConnection(entry, value); err != nil {
@@ -192,6 +189,5 @@ func ParseProvider(value string) (Provider, error) {
 	return "", &InvalidError{Field: "provider", Value: value, Allowed: Providers()}
 }
 
-// NeedsUsername reports whether an auth mode requires a login name. Kerberos
-// takes the identity from the ticket.
+// NeedsUsername reports whether an auth mode requires a login name.
 func NeedsUsername(a Auth) bool { return !secretless[a] }

@@ -7,17 +7,12 @@ import (
 	"github.com/branow/dbmap/internal/engine"
 )
 
-// manifestColumns is how wide a manifest row is. A shorter row is dropped
-// rather than padded.
+// manifestColumns is how wide a manifest row is; a shorter row is dropped.
 const manifestColumns = 6
 
-// manifestQuery lists every in-scope object with the cheap facts the planner
-// versions against.
-//
-// pg_class.reltuples is the planner's estimate, which is enough because it only
-// decides sample depth, and the exact alternative — count(*) — reads every page
-// of every table. A never-analysed table reports -1, which GREATEST folds to 0.
-// pg_total_relation_size reads stored page counts and is asked only of
+// manifestQuery lists every in-scope object with the facts the planner versions
+// against. reltuples is the planner's estimate; a never-analysed table reports
+// -1, which GREATEST folds to 0. pg_total_relation_size is asked only of
 // relations that have storage, since older servers raise for a view.
 func manifestQuery() string {
 	return routineCTE() + `
@@ -39,7 +34,7 @@ ORDER BY 1, 2`
 }
 
 // parseManifest turns catalog rows into objects, dropping any code the kind
-// table does not cover rather than guessing a kind for it.
+// table does not cover.
 func parseManifest(rows [][]string) []catalog.Object {
 	objects := make([]catalog.Object, 0, len(rows))
 	for _, raw := range rows {
@@ -63,7 +58,6 @@ func parseManifest(rows [][]string) []catalog.Object {
 	return objects
 }
 
-// Manifest fetches the manifest for the database the connection is open on.
 func (e *Engine) Manifest(ctx context.Context, conn engine.Conn) ([]catalog.Object, error) {
 	if err := e.halt(ctx, conn, "the manifest"); err != nil {
 		return nil, err

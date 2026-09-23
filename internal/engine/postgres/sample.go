@@ -9,17 +9,12 @@ import (
 	"github.com/branow/dbmap/internal/engine"
 )
 
-// CellChars caps one sampled cell: a describer needs the shape of a value, not
-// all of it.
+// CellChars caps one sampled cell.
 const CellChars = 200
 
-// sampleQuery reads the first n rows of one table.
-//
-// LIMIT n must never gain an ORDER BY: a sort ranks the whole table before
-// returning a row, while without one the executor stops at n. The projection is
-// explicit because the caller has already dropped the columns that must not be
-// read. Cells cast to text rather than a sized type, because Postgres allows
-// that cast from any type, so an unexpected column cannot fail the sample.
+// sampleQuery reads the first n rows of one table. LIMIT n must never gain an
+// ORDER BY: a sort ranks the whole table before returning a row. Cells cast to
+// text, which Postgres allows from any type, so no column can fail the sample.
 func (e *Engine) sampleQuery(table engine.Table, n int) string {
 	cells := make([]string, len(table.Columns))
 	for i, column := range table.Columns {

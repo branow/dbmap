@@ -1,16 +1,13 @@
 package credentials
 
 // Fake is an in-memory Store. It ships in the package, not in a test file, so
-// every command's tests can run with no keychain and no environment variable.
+// every command's tests can run with no keychain.
 type Fake struct {
-	// Values holds the stored secrets by key, for assertions.
 	Values map[string]string
-	// Err, when set, is returned by every operation, so a test can drive the
-	// failure branches.
+	// Err, when set, is returned by every operation.
 	Err error
 }
 
-// NewFake returns an empty in-memory store.
 func NewFake() *Fake { return &Fake{Values: map[string]string{}} }
 
 func (f *Fake) Get(key string) (Secret, error) {
