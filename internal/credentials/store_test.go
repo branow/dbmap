@@ -4,14 +4,20 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
 // stub is a keychain whose three operations are scripted, so every branch is
 // reachable without an operating system keychain being present.
 func stub(values map[string]string, failure error) *Keychain {
-	k := NewKeychain("test")
-	k.get = func(_, key string) (string, error) {
+	return script(NewKeychain("test"), values, failure)
+}
+
+// script fills in the seams of an already built keychain, so a test can choose
+// how the keychain was constructed and still drive it from memory.
+func script(k *Keychain, values map[string]string, failure error) *Keychain {
+	k.get = func(_, key string, _ ui) (string, error) {
 		if failure != nil {
 			return "", failure
 		}
@@ -21,14 +27,14 @@ func stub(values map[string]string, failure error) *Keychain {
 		}
 		return value, nil
 	}
-	k.set = func(_, key, value string) error {
+	k.set = func(_, key, value string, _ ui) error {
 		if failure != nil {
 			return failure
 		}
 		values[key] = value
 		return nil
 	}
-	k.remove = func(_, key string) error {
+	k.remove = func(_, key string, _ ui) error {
 		if failure != nil {
 			return failure
 		}
@@ -39,6 +45,27 @@ func stub(values map[string]string, failure error) *Keychain {
 		return nil
 	}
 	return k
+}
+
+// spy records the UI choice every operation is made with. Whether a dialog was
+// refused is invisible in the result of a call, so the test asserts on what
+// reached the seam instead.
+func spy(k *Keychain) *[]ui {
+	seen := &[]ui{}
+	get, set, remove := k.get, k.set, k.remove
+	k.get = func(service, key string, allow ui) (string, error) {
+		*seen = append(*seen, allow)
+		return get(service, key, allow)
+	}
+	k.set = func(service, key, value string, allow ui) error {
+		*seen = append(*seen, allow)
+		return set(service, key, value, allow)
+	}
+	k.remove = func(service, key string, allow ui) error {
+		*seen = append(*seen, allow)
+		return remove(service, key, allow)
+	}
+	return seen
 }
 
 var broken = errors.New("dbus is not running")
@@ -69,6 +96,70 @@ func TestKeychainErrors(t *testing.T) {
 			t.Fatalf("Delete: %v", err)
 		}
 	})
+}
+
+// TestKeychainAsksOnlyWhenSomeoneIsWatching is the hang this fix exists to
+// prevent: a store that was not told a human is present must refuse the
+// keychain's authorization dialog on every operation, because a dialog nobody
+// can see blocks the process forever.
+func TestKeychainAsksOnlyWhenSomeoneIsWatching(t *testing.T) {
+	tests := []struct {
+		name     string
+		keychain *Keychain
+		want     ui
+	}{
+		{name: "default", keychain: NewKeychain("test"), want: noUI},
+		{name: "non-interactive", keychain: newKeychain("test", noUI), want: noUI},
+		{name: "interactive", keychain: newKeychain("test", allowUI), want: allowUI},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			key := DBKey("primary")
+			keychain := script(tt.keychain, map[string]string{key: password}, nil)
+			seen := spy(keychain)
+			if _, err := keychain.Get(key); err != nil {
+				t.Fatalf("Get: %v", err)
+			}
+			if err := keychain.Set(key, NewSecret(password)); err != nil {
+				t.Fatalf("Set: %v", err)
+			}
+			if err := keychain.Delete(key); err != nil {
+				t.Fatalf("Delete: %v", err)
+			}
+			if len(*seen) != 3 {
+				t.Fatalf("calls recorded = %d, want 3", len(*seen))
+			}
+			for i, allow := range *seen {
+				if allow != tt.want {
+					t.Errorf("call %d asked with ui %v, want %v", i, allow, tt.want)
+				}
+			}
+		})
+	}
+}
+
+// TestBlockedKeychainNamesBothWaysOut pins the message a user actually sees
+// after a rebuild: a generic "keychain unavailable" leaves them with nothing to
+// do, so the remedy has to name the two paths that work.
+func TestBlockedKeychainNamesBothWaysOut(t *testing.T) {
+	key := DBKey("primary")
+	_, err := stub(nil, errBlocked).Get(key)
+
+	var failure *KeychainError
+	if !errors.As(err, &failure) {
+		t.Fatalf("error = %v, want KeychainError", err)
+	}
+	if !errors.Is(err, errBlocked) {
+		t.Error("the cause was dropped")
+	}
+	for _, want := range []string{"re-authorize", "re-add", EnvName(key)} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("message %q does not mention %q", err.Error(), want)
+		}
+	}
+	if strings.Contains(failure.Remedy, "--allow-plaintext") {
+		t.Error("a blocked read offers the plaintext file instead of the way out")
+	}
 }
 
 func TestEnvStore(t *testing.T) {

@@ -97,14 +97,14 @@ func TestATableOfOnlyPIIIsNeverQueried(t *testing.T) {
 	}
 }
 
-func TestUnboundedAndBlobColumnsAreExcluded(t *testing.T) {
+func TestOpaqueColumnsAreExcluded(t *testing.T) {
 	cases := []catalog.Column{
 		{Name: "Body", Type: "varchar", Length: "(max)"},
 		{Name: "Blob", Type: "varbinary"},
-		{Name: "Doc", Type: "xml"},
+		{Name: "Payload", Type: "bytea"},
+		{Name: "Picture", Type: "image"},
 		{Name: "Shape", Type: "geography"},
 		{Name: "Version", Type: "rowversion"},
-		{Name: "Payload", Type: "bytea"},
 	}
 
 	for _, c := range cases {
@@ -118,6 +118,38 @@ func TestUnboundedAndBlobColumnsAreExcluded(t *testing.T) {
 			}
 			if len(plan.Withheld) != 1 || plan.Withheld[0].Reason != catalog.WithheldUnsampleable {
 				t.Fatalf("not recorded as unsampleable: %+v", plan.Withheld)
+			}
+		})
+	}
+}
+
+// The regression that matters. Long string types are the value domain: a status
+// lookup's meaning lives in its name column, not its integer key. Excluding them
+// once made a three-row lookup sample project nothing but an id, and the
+// describer never saw the values the whole design exists to capture. Every cell
+// is capped anyway, so unboundedness is not a reason to withhold one.
+func TestOrdinaryStringColumnsAreSampled(t *testing.T) {
+	cases := []catalog.Column{
+		{Name: "Name", Type: "text"},
+		{Name: "Label", Type: "ntext"},
+		{Name: "Code", Type: "varchar", Length: "(50)"},
+		{Name: "Title", Type: "nvarchar", Length: "(200)"},
+		{Name: "Doc", Type: "xml"},
+		{Name: "Config", Type: "jsonb"},
+	}
+
+	for _, c := range cases {
+		t.Run(c.Name+" "+c.Type, func(t *testing.T) {
+			plan := Project(table("T", 10, col("ID", "int"), c))
+
+			var projected bool
+			for _, p := range plan.Table.Columns {
+				if p == c.Name {
+					projected = true
+				}
+			}
+			if !projected {
+				t.Fatalf("%s %s was withheld; the value domain lives in columns like this", c.Name, c.Type)
 			}
 		})
 	}
