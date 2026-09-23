@@ -90,7 +90,19 @@ func (e *Engine) halt(ctx context.Context, conn engine.Conn, stage string) error
 
 // flag reads a boolean the query already rendered as "1" or "0", so no parser
 // here has to know how a driver spells true.
-func flag(cell string) bool { return strings.TrimSpace(cell) == "1" }
+// flag reads a catalog boolean. Drivers disagree about how a SQL bit reaches a
+// string scan — go-mssqldb hands back a Go bool, which reads as "true", while a
+// catalog queried through other paths renders the same column as "1". Accepting
+// both is boundary parsing, not defensiveness: reading only one spelling made
+// every flag silently false, so nullable columns were written "not null" and a
+// primary key was indexed as an ordinary index.
+func flag(cell string) bool {
+	switch strings.ToLower(strings.TrimSpace(cell)) {
+	case "1", "true", "t", "yes", "y":
+		return true
+	}
+	return false
+}
 
 // cells trims every cell of a row.
 func cells(row []string) []string {
