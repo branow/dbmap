@@ -36,24 +36,32 @@ differ in their queries, not their plumbing.
 the pooling win is **independent of auth**: it holds for postgres, for sql logins, and for
 kerberos alike. only *which driver* provides it was in question, and that is now decided.
 
-**G1a — DECIDED: kerberos, single realm, pure-go driver.** `go-mssqldb`'s
-`integratedauth/krb5` over `jcmturner/gokrb5`. no cgo, no ODBC, no subprocess anywhere in the
-sqlserver path. binding consequences:
+**G1a — DECIDED: kerberos with the pure-go driver. MEASURED against a real
+cross-realm estate; the limitation is narrower than the upstream issue implies.**
+`go-mssqldb`'s `integratedauth/krb5` over `jcmturner/gokrb5`. no cgo, no ODBC, no
+subprocess anywhere in the sqlserver path.
 
-- **the credential cache must be a `FILE:` ccache.** macOS defaults to `API:` type
-  (keychain-backed) and gokrb5 cannot read it -> `kinit -c FILE:<path>`, and the connection
-  carries `krb5-credcachefile`. `doctor` must detect an unreadable/absent ccache and say
-  exactly this, because it is the failure everyone hits first.
-- connection string shape: `authenticator=krb5`, plus `krb5-credcachefile` (or
-  `krb5-keytabfile` + `krb5-realm` for a service account), `MultiSubnetFailover=true` for an
-  AG listener, `ApplicationIntent=ReadOnly`.
-- EPA / channel binding is supported (landed 2026-03), so an instance with Extended
-  Protection on is fine.
-- **cross-realm is out of scope, by decision.** gokrb5 does not support it (go-mssqldb #264
-  open; upstream fix gokrb5 #536 unmerged for years) and gokrb5 was last pushed 2024-07.
-  a `Cannot generate SSPI context` against a listener is the signature of a `[capaths]` /
-  referral setup -> `doctor` must name cross-realm as an unsupported configuration rather
-  than reporting a generic auth failure, so the diagnosis is not left to the user.
+what was actually measured, on an estate whose accounts live in one realm and whose
+sql hosts live in another:
+
+- gokrb5 cannot **obtain** a cross-realm service ticket. given only a local TGT it
+  asks its own KDC for a foreign service and gets
+  `KDC_ERR_S_PRINCIPAL_UNKNOWN`; it does not follow the referral. a cross-realm
+  TGT in the cache is not enough either — the TGS exchange still fails.
+- gokrb5 CAN **use** a service ticket already present in the ccache. with one
+  there, every check passes against two different cross-realm listeners.
+- so cross-realm works, with a priming step that costs no password:
+  `kgetcred "MSSQLSvc/<host>:1433@<HOST_REALM>"` then
+  `kcc copy_cred_cache FILE:<path>`. the realm must be spelled on the SPN; without
+  it the tool assumes the local realm and fails.
+- the cache must be a `FILE:` ccache. macOS defaults to `API:` (keychain-backed)
+  and gokrb5 cannot read it. `doctor` names this and prints the fix, because it is
+  the failure everyone hits first.
+- EPA / channel binding is supported, so an instance with Extended Protection on
+  is fine.
+
+`doctor` should teach the priming sequence rather than leaving a user to derive
+it. OPEN: it currently names the ccache fix only.
 
 **G1b — the escape hatch, if cross-realm ever becomes a requirement**: `alexbrainman/odbc`
 over `msodbcsql18` uses the system GSSAPI, handles cross-realm, and **still pools**, so the
@@ -100,11 +108,25 @@ two rules specific to this tool, because it holds a *database password*, not an 
 - **two credential axes, not one.** connections (db) and backends (llm) are independent; one
   combined profile would duplicate the llm key per database. -> two named namespaces (S3), a
   profile merely *selects* one of each. keyring keys `db:<name>` and `llm:<name>`.
-- **no silent plaintext fallback.** default `secrets.fallback: never` — a keychain failure is
-  a hard error naming the fix, never a quiet 0600 file on disk, because a transient dbus
-  hiccup would otherwise persist a DB password permanently. plaintext is opt-in
-  (`--allow-plaintext`, or config). headless CI uses env vars (S4), which is what makes
-  `never` safe as the default.
+- **no silent plaintext fallback.** default `secrets.fallback: never` — a keychain
+  failure is a hard error naming the fix, never a quiet 0600 file on disk, because
+  a transient hiccup would otherwise persist a DB password permanently. plaintext
+  is opt-in (`--allow-plaintext`, or config). headless CI uses env vars (S4), which
+  is what makes `never` safe as the default.
+- **the keychain may never raise a dialog nobody can see.** MEASURED: macOS binds a
+  login-keychain item's ACL to the storing binary's code identity, so any rebuild
+  makes the next read prompt — and in a script, CI, or a piped shell that prompt
+  blocks forever with no output. a 120-second timeout was reached; the same command
+  with the secret in the environment returned instantly.
+  the fix needs BOTH `kSecUseAuthenticationUI = kSecUseAuthenticationUIFail` (which
+  alone governs only the data-protection keychain and does NOT stop this dialog)
+  and the process switch `SecKeychainSetUserInteractionAllowed(FALSE)`; the
+  resulting status is `errSecAuthFailed`, not `errSecInteractionNotAllowed`, so the
+  error table must carry both. UI is allowed only when a person is watching a
+  terminal (`IO.CanPrompt()`), the zero value never prompts, and the remedy names
+  all three ways out: re-authorize, re-add the entry, or use the env var.
+  OPEN: signing the released binary would give it a stable identity across builds
+  and make prompting workable again. a release decision, not a build one.
 
 ## chunks
 
