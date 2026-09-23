@@ -1,18 +1,16 @@
 package catalog
 
-// Signal is an engine's cheap "has this object changed" indicator — SQL
-// Server's modify_date, already free in the manifest. It decides whether to
-// FETCH: it never misses a real change but over-reports badly, because a
-// release that ALTERs 58 procedures bumps all 58 dates even when most are
-// byte-identical. The exact content fingerprint then decides whether to
-// DESCRIBE, so the loose check guards the cheap stage and the exact one guards
-// the LLM call.
+// Signal is an engine's cheap "has this object changed" indicator, already free
+// in the manifest. It gates the FETCH stage only: it never misses a real change
+// but over-reports badly, since one release ALTERing many procedures bumps every
+// date even where the bodies are byte-identical. The exact content fingerprint
+// then gates DESCRIBE, so the loose check guards the cheap stage and the exact
+// one guards the LLM call.
 //
-// A signal is OPTIONAL. Postgres has no modify_date, so an object from an
-// engine that supplies none carries the empty Signal and can never be proven
-// untouched — it always fetches, and the content fingerprint does all the real
-// gating. That is a property of the object, not of an engine's name, so no
-// stage anywhere special-cases an engine.
+// A signal is OPTIONAL. An engine that supplies none leaves it empty, and an
+// object with an empty signal can never be proven untouched — it always fetches.
+// That is a property of the object, not of an engine's name, so no stage
+// special-cases an engine.
 type Signal string
 
 // Present reports whether an engine supplied a modify signal at all.
@@ -23,9 +21,8 @@ func (s Signal) Present() bool { return s != "" }
 // absent signal.
 func (s Signal) Same(other Signal) bool { return s.Present() && s == other }
 
-// String renders the signal for the index, where it earns its place for a
-// reader too: a procedure untouched since 2018 says something a description
-// cannot.
+// String renders the signal for the index, where it tells a reader something a
+// description cannot: how long an object has gone untouched.
 func (s Signal) String() string { return string(s) }
 
 // Object is one indexed database object as the manifest reports it. Rows and KB
@@ -45,8 +42,7 @@ type Object struct {
 func (o Object) Key() string { return o.Schema + "." + o.Name }
 
 // Describable reports whether this object earns a generated sentence, read off
-// the kind table rather than decided here. An object of a kind the index does
-// not cover is not describable.
+// the kind table rather than decided here.
 func (o Object) Describable() bool {
 	spec, ok := Lookup(o.Kind)
 	return ok && spec.Describe

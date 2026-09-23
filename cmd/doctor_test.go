@@ -60,9 +60,9 @@ type line struct {
 	Detail string `json:"detail"`
 }
 
-// doctored runs the preflight against a seeded harness and returns the rows it
-// produced, everything it printed, and how it ended. The rows are read back as
-// json so a test asserts on a status column rather than on a substring.
+// doctored runs the preflight against a seeded harness and returns its rows,
+// its output and how it ended. The rows come back as json so a test asserts on
+// a status column rather than a substring.
 func doctored(t *testing.T, h *harness, open opener, named string) ([]line, string, error) {
 	t.Helper()
 	if err := h.factory.Resolve(config.Overrides{Output: "json"}); err != nil {
@@ -127,8 +127,7 @@ func TestDoctorReportsEveryCheckSeparately(t *testing.T) {
 	}
 }
 
-// The failure everyone hits first on macOS. The remedy has to survive from the
-// typed error all the way to what the user reads, verbatim.
+// The remedy has to survive from the typed error to what the user reads.
 func TestDoctorPrintsTheKerberosCredentialCacheRemedy(t *testing.T) {
 	h := newHarness(t)
 	h.seed(t)

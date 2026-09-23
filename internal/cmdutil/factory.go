@@ -1,6 +1,6 @@
 // Package cmdutil holds what every command needs and nothing a command does:
-// the Factory that carries its dependencies, the typed error vocabulary, and
-// the single translation from an error to a process exit code.
+// the Factory, the typed error vocabulary, and the one translation from an
+// error to a process exit code.
 package cmdutil
 
 import (
@@ -12,8 +12,8 @@ import (
 	"github.com/branow/dbmap/internal/output"
 )
 
-// Flags are the persistent flags after the whole precedence chain has run.
-// Commands read the resolved values and never re-derive them.
+// Flags are the persistent flags after the precedence chain has run. Commands
+// read the resolved values and never re-derive them.
 type Flags struct {
 	Profile string
 	Output  output.Format
@@ -22,10 +22,8 @@ type Flags struct {
 	Force   bool
 }
 
-// ConnectionProbe verifies a connection before its settings are stored. It is
-// the "verify before store" seam: nil means no verification, which is what M1
-// ships; the engine milestone supplies the real probe without changing any
-// command's surface.
+// ConnectionProbe verifies a connection before its settings are stored. Nil
+// means no verification.
 type ConnectionProbe func(ctx context.Context, name string, entry config.Connection,
 	secret credentials.Secret) error
 
@@ -40,22 +38,20 @@ type Probes struct {
 }
 
 // Factory is the dependency bundle every command constructor takes. It exists
-// so there are no globals: a test builds one with buffer streams, an in-memory
-// config and a fake secret store, and the command under test cannot tell.
+// so there are no globals: a test builds one from buffers and fakes.
 type Factory struct {
 	IO     *iostreams.IOStreams
 	Config *config.Config
 	Store  credentials.Store
 	Flags  Flags
 	Probes Probes
-	// Env reads the process environment. It is a field so a test supplies its
-	// own, and so nothing in a test can reach the machine's real variables.
+	// Env reads the process environment, as a field so nothing in a test can
+	// reach the machine's real variables.
 	Env func(string) string
 }
 
-// EnvSecret returns the secret the environment already carries for a key. It is
-// the path that keeps a headless run from being a dead end: a command can take
-// a credential with no terminal, no stdin and no keychain read.
+// EnvSecret returns the secret the environment already carries for a key: the
+// path that lets a headless run take a credential with no keychain at all.
 func (f *Factory) EnvSecret(key string) (credentials.Secret, bool) {
 	secret, err := credentials.NewEnv(f.Env).Get(key)
 	return secret, err == nil
@@ -64,8 +60,7 @@ func (f *Factory) EnvSecret(key string) (credentials.Secret, bool) {
 // Writer returns the output writer for the resolved format.
 func (f *Factory) Writer() output.Writer { return output.New(f.Flags.Output, f.IO.Out) }
 
-// Note writes a status line unless the run is quiet. Status lines go to the
-// writer, so a machine-readable format drops them.
+// Note writes a status line unless the run is quiet.
 func (f *Factory) Note(text string) error {
 	if f.Flags.Quiet {
 		return nil
@@ -73,9 +68,8 @@ func (f *Factory) Note(text string) error {
 	return f.Writer().Note(text)
 }
 
-// Resolve runs the precedence chain once and fills the resolved flags, so every
-// command sees the same answer. It is called from the root command's
-// pre-run, before any command body.
+// Resolve runs the precedence chain once, from the root command's pre-run, so
+// every command sees the same answer.
 func (f *Factory) Resolve(o config.Overrides) error {
 	format, err := output.ParseFormat(f.Config.Output(o))
 	if err != nil {

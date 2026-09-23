@@ -1,0 +1,305 @@
+# dbmap design
+
+Why the tool is built the way it is. For the user-facing description, see the
+[README](../README.md).
+
+## The problem
+
+A coding agent working against an unfamiliar database spends its first minutes
+rediscovering the schema: list the tables, describe the columns, guess the join,
+run three more queries to learn that a status column holds six values. That work
+is repeated in full next session against a schema that did not change.
+
+The index is therefore optimised for *reading*, not for completeness. It is a
+small tree of TSV files with one line per object, because an agent can read
+those in one pass without a parser, and a person can `grep` them.
+
+## Output shape
+
+Tables and views get a file each, because a reader needs every column.
+Procedures and functions do not: their parameters fit on one line, and the index
+does not reproduce bodies.
+
+Staleness state (`modified`, `fingerprint`) lives in the catalogs themselves
+rather than in a sidecar file. A parallel state file drifts out of step with the
+index beside it, and `modified` earns its place for a reader anyway — a
+procedure untouched since 2018 says something a description cannot.
+
+Nothing derivable is stored. A table's sample depth is `min(rows, 25)` and
+`rows` is already a column.
+
+Triggers are not indexed as objects either. One measured database held 258 of
+them at close to one per table, generated changelog writers carrying nothing a
+reader of the parent table lacks; the parent records a trigger *count* instead.
+
+There is no foreign-key graph. In the estate this was measured against, three
+databases declared two foreign keys between them; joins were a naming
+convention enforced nowhere. Inferring join candidates from column names was
+considered and rejected as guesses dressed as data.
+
+## Staleness: two tiers
+
+The central idea. Two signals guard two different costs.
+
+- **The modify signal decides whether to FETCH.** It is free — already in the
+  catalog listing — and never misses a real change, but it over-reports badly:
+  a release `ALTER`s a batch of procedures and moves every date, most of them
+  byte-identical to what was already deployed.
+- **A content hash decides whether to DESCRIBE.** Computed locally on what came
+  back. Fetching is seconds; describing is a model call.
+
+So a release touching fifty procedures fetches fifty bodies and describes the
+handful that actually changed. Without the second tier it would be fifty calls.
+
+Not every engine has a modify signal — PostgreSQL has no per-object modify date
+— so the signal is optional. An object without one always fetches, and the
+content hash does all the real gating. The design degrades to one tier without
+special-casing an engine by name.
+
+### Fingerprints
+
+Modules hash their definition, normalised for line endings and trailing
+whitespace so a deployment tool rewriting CRLF does not read as an edit.
+
+Tables have no definition, so they hash the structure a reader would need:
+columns with type, nullability and identity, primary key, indexes, foreign keys,
+trigger count, plus sample depth. The canonical form is built as explicit lines
+rather than serialised, so adding an unrelated field to an internal struct
+cannot move the hash.
+
+Sample row *values* are deliberately excluded. They change on every run against
+a live database and would leave every table permanently dirty.
+
+### Sample depth
+
+`sampleDepth(rows) = min(rows, 25)` — how many rows the describer actually sees.
+A table is stale when that number moves.
+
+- `0 -> 100` — 0 vs 25, redescribe: the model had nothing, now it has a sample
+- `8 -> 9` — redescribe: an enum gained a value, and at that size every row is a
+  value worth naming
+- `40 -> 60` — 25 vs 25, skip: the same first 25 rows
+- `616M -> 617M` — skip
+- `40 -> 10` — redescribe: the sample shrank
+
+This applies to **tables only**. A procedure is described from its body, which
+the modify signal already covers.
+
+25 comes from the measured distribution: in one database, 148 of 491 non-empty
+tables held 25 rows or fewer — the lookup tables, where the sample is the whole
+table. The distribution flattens past that; raising the number to 30 covered
+five more tables.
+
+An earlier design used log-scale buckets (empty/tiny/small/populated). It was
+wrong: it created an arbitrary boundary at 999/1000 that caused pointless
+redescribes, and it did not express the actual question, which is "does the
+model see something different".
+
+## Value domains
+
+The distinct values a status or lookup column takes, and what each means — the
+single most repeated discovery in day-to-day work.
+
+They do **not** need a `DISTINCT` scan. In practice the domains are their own
+lookup tables and they are tiny: one measured database held 45 of them, every
+one under 25 rows. So sampling a small table *is* capturing its value domain,
+for free, with no dangerous query.
+
+Sampling is therefore ordered complete-tables-first, so a capped run spends its
+budget on domains rather than on 25 rows off the front of a 600-million-row log.
+
+This is also why long string columns are sampled rather than withheld. An early
+version listed `text` as unsampleable — correct for SQL Server, where it is a
+deprecated large-object type, and wrong for PostgreSQL, where it is the ordinary
+string type. The effect was that a three-row status lookup projected its integer
+key and nothing else, so the describer never saw `Incomplete`, `Pending` or
+`CC Declined` — the exact values the design exists to capture. Every cell is
+capped anyway, so unboundedness is not a reason to skip a column. Only genuinely
+opaque values are withheld: binary payloads, spatial types, row versions.
+
+## Safety
+
+The rules exist because an earlier tool of this kind took a SQL Server instance
+down. Not a slow query — the box stopped accepting connections and the cluster
+service could not restart, because the operating system ran out of memory.
+
+The instance was configured with `max server memory` at 119 GB of 125 GB, which
+left the network stack, the availability-group threads and the cluster service
+about 6 GB between them. Any query taking a large memory grant starved the OS.
+The data made it easy to trip: 606 tables across three databases, 563 GB total,
+20 tables over 100M rows, the largest 616,802,364 rows and 42 GB. Any `COUNT(*)`,
+`sp_spaceused` loop or `SELECT DISTINCT` for a value domain is a
+multi-hundred-gigabyte scan.
+
+So, non-negotiably:
+
+- **Every statement is proven read-only before a connection is opened.** It must
+  open with `SELECT` or `WITH` and clear a deny list. Fail-closed: anything
+  unclassifiable is refused. This is enforced centrally in the query path, so no
+  engine can forget it.
+- **Every statement carries its engine's resource cap.** SQL Server appends
+  `OPTION (MAXDOP 1, MAX_GRANT_PERCENT = 1)`; `MAX_GRANT_PERCENT` is
+  engine-enforced, so a query wanting more memory spills to tempdb instead of
+  taking RAM the OS needs. PostgreSQL instead opens a read-only transaction with
+  a statement timeout, a bounded `work_mem` and parallelism disabled — an
+  engine-enforced guarantee, stronger than a regex, which stays anyway.
+- **Row counts and sizes come from catalog statistics** —
+  `sys.dm_db_partition_stats`, `pg_class.reltuples` — never a scan.
+- **Samples use `TOP (n)` / `LIMIT n` with no `ORDER BY`.** An `ORDER BY` ranks
+  the whole table; without one the engine stops after n rows.
+- **Health is checked before every source and every batch**, not once at
+  startup. An unreadable reading is *unknown*, never healthy: not being able to
+  see the floor is not the same as being above it.
+- **Production is refused.** A connection marked production does not resolve.
+
+## Secrets and personal data
+
+- **Module bodies are redacted on arrival**, before the cache is written and
+  long before a prompt. The engine returns a redacted type, so an unredacted
+  body cannot leave the engine package at all. Patterns keep the key and drop
+  the value — that a procedure authenticates somewhere is worth indexing, the
+  credential never is. Counts are reported rather than silently swallowed, so a
+  real secret shows up in the build summary. Across 622 procedure bodies in the
+  measured corpus this matched 7 staff email addresses and zero credentials.
+- **Columns holding personal data are never sampled**, matched on the column
+  name, because a type says nothing about who a value belongs to. A table with
+  nothing else in it is never queried at all. The sample records which columns
+  it withheld, so the describer knows they exist.
+- **Every sampled cell is capped** at 200 characters.
+- **Sampled values never reach the index.** They are transient describer input.
+- **Secrets never enter the config file.** They live in the OS keychain, or come
+  from the environment. There is no silent fallback to a plaintext file: a
+  keychain failure is an error naming the fix, because a transient failure would
+  otherwise persist a database password to disk permanently.
+
+## Describing
+
+Calls are batched: several objects per request, sized by prompt characters
+rather than count, because objects are wildly uneven — a 200-line procedure and
+a two-column lookup table are not the same unit of work. The budget is 40,000
+characters or 12 objects, whichever comes first; an object over budget goes
+alone rather than being dropped. That turns roughly 1,200 calls into roughly 100.
+
+Answers come back keyed by object name and are matched **by name, not
+position**, so a reordered response still lands correctly. An object the model
+skipped is reported, not silently blank. A failed batch is logged and skipped —
+a partial index beats none.
+
+Bodies are capped at 16,000 characters for the prompt, which sent 90% of a
+measured corpus whole. The cache cap is higher, so the stored copy is always the
+fuller one. A procedure's logic cannot be summarised from its opening, because
+the writes are usually at the bottom.
+
+### Two prompt lessons
+
+Both cost real debugging, and both are pinned by tests.
+
+**Never name the output field `description`.** With a field named `description`
+whose schema text read "one sentence saying what this object does", every model
+tested filled it with a description *of the field*:
+
+```
+Stored procedure analysis: functionality, operation type, and data sources.
+One-sentence summary of what dbo.OrderStatusGet does and the tables it touches.
+```
+
+Better instruction-following made it more reliably wrong. Renaming the field to
+`sentence`, with schema text phrased as an order — "Put the finished sentence
+here verbatim. Never describe what the sentence would say" — fixed every case.
+
+**Give a verb-first instruction with worked examples.** Listing requirements
+("say whether it reads or writes, and name the main tables") invites a small
+model to restate the list. Naming the failure mode and showing good and bad
+examples fixes it.
+
+**A small model is sufficient.** That is measured, and the tool does not default
+to a larger one.
+
+Empty tables are the canary for prompt bugs: a table with rows gets a sample
+that papers over a missing-structure bug, while an empty one produces visible
+garbage. That is how a bug where structure was dropped before reaching the
+prompt was found.
+
+## Structure
+
+Dependencies flow bottom-up; siblings do not import each other, and the domain
+never imports the shell.
+
+```
+main.go
+└── cmd/                     cobra tree; flag parsing only
+    └── internal/cmdutil     Factory: the dependency bundle, and ExitCode
+        ├── internal/config        named connections, backends, profiles
+        ├── internal/credentials   keychain store, env path, opt-in plaintext
+        ├── internal/iostreams     streams, tty, prompts
+        ├── internal/output        table and json writers
+        │
+        ├── internal/index         the build pipeline
+        │   ├── internal/connect       connection record -> pooled *sql.DB
+        │   │   └── internal/engine        Engine interface + safety contract
+        │   │       ├── internal/engine/sqlserver
+        │   │       └── internal/engine/postgres
+        │   ├── internal/cache         resumable fetch cache
+        │   ├── internal/redact        secret and personal-data rules
+        │   ├── internal/plan          the two-tier staleness planner
+        │   │   └── internal/fingerprint
+        │   ├── internal/sample        projection planning and ordering
+        │   ├── internal/describe      prompts, batching, name matching
+        │   │   └── llm (module)           provider seam
+        │   └── internal/render        the TSV tree
+        │
+        └── internal/catalog      the shared vocabulary; imports nothing
+```
+
+### Adding an engine
+
+Everything above `internal/engine` is dialect-agnostic. A new engine implements:
+
+```go
+type Engine interface {
+    Name() string
+    Manifest(ctx, Conn) ([]catalog.Object, error)
+    Structure(ctx, Conn) (map[string]catalog.Structure, error)
+    Modules(ctx, Conn, keys []string) (map[string]redact.Body, error)
+    Sample(ctx, Conn, Table, n int) (catalog.Sample, error)
+    Health(ctx, Conn) (Health, error)
+    Quote(identifier string) string
+    Guard() Guard
+}
+```
+
+Three things are per-engine **data**, not per-engine branches: the `Guard`
+applied to every statement, the health stop conditions, and whether the engine
+supplies a modify signal. An engine that cannot see server memory reports that,
+so a memory condition is not asked of it rather than answered with zero.
+
+### Connections
+
+Connections are opened through `database/sql` with native drivers, which is
+where connection pooling comes from — the dominant cost in a full run is login
+setup, not query time.
+
+Kerberos is supported on both engines through a pure-Go implementation, with two
+consequences worth knowing:
+
+- The credential cache must be a `FILE:` cache. macOS defaults to an
+  `API:`-type cache that the pure-Go path cannot read; `dbmap doctor` names this
+  and prints the `kinit` command that fixes it.
+- A cross-realm setup works, but the service ticket has to already be in the
+  cache: the pure-Go path cannot follow a realm referral to fetch one, though it
+  uses one happily. `doctor` prints the two commands that prime it, because the
+  driver's own error (`KDC_ERR_S_PRINCIPAL_UNKNOWN`) reads like a wrong hostname
+  and sends the reader looking at DNS.
+
+## Testing
+
+No test touches a real database, a real model, a real keychain or the network.
+Every external dependency sits behind an interface with an in-memory fake, and
+the rules above are pinned by tests that fail loudly if someone weakens them:
+that generated queries are read-only, that row counts never come from a scan,
+that samples emit no `ORDER BY`, that a table of only personal data is never
+queried, that an unreadable health reading is not healthy, that a second run
+over unchanged input makes no model call.
+
+The real-keychain test is gated behind both a build tag and an environment
+variable, so `go test ./...` never touches the developer's login keychain.

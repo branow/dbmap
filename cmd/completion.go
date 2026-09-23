@@ -8,8 +8,8 @@ import (
 	"github.com/branow/dbmap/internal/cmdutil"
 )
 
-// shells maps a shell name to its generator. It is a table so the argument
-// validator and the generator can never list different shells.
+// shells maps a shell name to its generator, as one table so ValidArgs and the
+// generator cannot list different shells.
 var shells = map[string]func(*cobra.Command) error{
 	"bash": func(c *cobra.Command) error {
 		return c.Root().GenBashCompletionV2(c.OutOrStdout(), true)
@@ -23,9 +23,8 @@ var shells = map[string]func(*cobra.Command) error{
 	},
 }
 
-// newCompletion writes a shell completion script to stdout. dbmap generates its
-// own rather than using cobra's default command, so the script goes to the
-// factory's stream like every other output.
+// newCompletion writes a shell completion script to the factory's stream;
+// cobra's own completion command would bypass it.
 func newCompletion(f *cmdutil.Factory) *cobra.Command {
 	return &cobra.Command{
 		Use:       "completion <shell>",

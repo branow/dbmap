@@ -2,15 +2,14 @@ package credentials
 
 import "os"
 
-// Env reads secrets from the environment. It is what makes a headless run work
-// on a machine with no keychain, and it is the reason the default policy can
-// refuse a plaintext file without stranding CI.
+// Env reads secrets from the environment. It is what lets the default policy
+// refuse a plaintext file without stranding a machine that has no keychain.
 type Env struct {
 	lookup func(string) string
 }
 
-// NewEnv returns an environment-backed store. A nil lookup reads the process
-// environment; a test passes its own.
+// NewEnv returns an environment-backed store; a nil lookup reads the process
+// environment.
 func NewEnv(lookup func(string) string) *Env {
 	if lookup == nil {
 		lookup = os.Getenv

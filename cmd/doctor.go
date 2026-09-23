@@ -17,35 +17,30 @@ import (
 	"github.com/branow/dbmap/internal/output"
 )
 
-// The three outcomes a check reports. They are strings because they are output,
-// read by a person and by a script parsing json.
+// The three outcomes a check reports. They are output, so they are strings.
 const (
 	statusPass    = "pass"
 	statusFail    = "fail"
 	statusSkipped = "skipped"
 )
 
-// probe is the live half of a preflight: everything doctor is allowed to ask a
-// server, and nothing else. It is an interface so every check in this file is
-// testable with no database behind it.
+// probe is the live half of a preflight: everything doctor may ask a server and
+// nothing else. An interface, so every check is testable with no database.
 type probe interface {
-	// Verify proves the login was accepted. It reads no catalog and returns no
-	// row: it is the cheapest real call there is.
+	// Verify proves the login was accepted: no catalog read, no row.
 	Verify(ctx context.Context) error
-	// Health runs the engine's own health statement, which is a guarded
-	// read-only query and therefore proves the read path as well as the
-	// reading.
+	// Health runs the engine's guarded read-only health statement.
 	Health(ctx context.Context) (engine.Health, error)
 	Close() error
 }
 
-// opener turns a connection record into a probe. Opening is where a Kerberos
-// credential cache is validated and a cross-realm setup is refused, so a
-// failure here is already diagnosed by the time doctor sees it.
+// opener turns a connection record into a probe. Opening validates a Kerberos
+// credential cache and refuses a cross-realm setup, so a failure here arrives
+// already diagnosed.
 type opener func(name string, entry config.Connection, secret credentials.Secret) (probe, error)
 
-// newDoctor builds the preflight command. It sends nothing heavy: one login,
-// one health statement, and no catalog read at all.
+// newDoctor builds the preflight command: one login, one health statement, no
+// catalog read.
 func newDoctor(f *cmdutil.Factory) *cobra.Command {
 	return &cobra.Command{
 		Use:   "doctor [connection]",
@@ -66,8 +61,8 @@ func newDoctor(f *cmdutil.Factory) *cobra.Command {
 	}
 }
 
-// proves renders the check table for the command's own help, so what doctor
-// documents and what doctor runs are the same list.
+// proves renders the check table into the command's help, so what doctor
+// documents and what it runs are one list.
 func proves() string {
 	var out strings.Builder
 	for _, c := range preflights {
@@ -76,8 +71,7 @@ func proves() string {
 	return out.String()
 }
 
-// preflight is one doctor run: what it is checking, and what it has opened so
-// far. Each check reads what the ones before it left behind.
+// preflight is one doctor run: what it checks, and what it has opened so far.
 type preflight struct {
 	factory *cmdutil.Factory
 	name    string
@@ -89,8 +83,7 @@ type preflight struct {
 }
 
 // check is one row of the preflight table: what it proves, and how. The checks
-// are data walked in order, so adding one is a row rather than another branch,
-// and so the command's output and its documentation cannot drift apart.
+// are data walked in order, so adding one is a row rather than a branch.
 type check struct {
 	Name string
 	// Doc is what this check proves, for the command's own help.
@@ -99,9 +92,9 @@ type check struct {
 	Run func(context.Context, *preflight) (string, error)
 }
 
-// preflights is the whole check list, in the order each becomes answerable.
-// Each one depends on the one before it, which is why a failure skips the rest
-// rather than producing four cascading complaints about the same cause.
+// preflights is the check list, in the order each becomes answerable. Each
+// depends on the one before, so a failure skips the rest rather than producing
+// four cascading complaints about one cause.
 var preflights = []check{
 	{
 		Name: "credential",
@@ -131,8 +124,7 @@ var preflights = []check{
 }
 
 // credential proves the secret exists before anything is dialled. An auth mode
-// that carries no password is not a gap: the Kerberos ticket cache is the
-// credential, and the next check is what reads it.
+// that carries no password is not a gap: the ticket cache is the credential.
 func credential(_ context.Context, p *preflight) (string, error) {
 	if !config.NeedsPassword(p.entry.Auth) {
 		return string(p.entry.Auth) + " carries no stored password", nil
@@ -146,8 +138,7 @@ func credential(_ context.Context, p *preflight) (string, error) {
 	return "found under " + key, nil
 }
 
-// connection resolves the record into a live pool. Nothing is dialled here —
-// what this proves is that the settings are usable at all, which is where a
+// connection resolves the record into a pool without dialling: this is where a
 // production target is refused, a Kerberos credential cache is read, and a
 // cross-realm setup is named.
 func connection(_ context.Context, p *preflight) (string, error) {
@@ -167,10 +158,9 @@ func auth(ctx context.Context, p *preflight) (string, error) {
 	return "the server accepted the login", nil
 }
 
-// readonly proves the read path, not a setting. The engine's health statement
-// goes through the same gate and the same resource guard every other statement
-// does, so a statement coming back at all is the proof that reads are routed
-// and guarded. The reading it produced is judged by the next check.
+// readonly proves the read path, not a setting: the health statement goes
+// through the same gate and resource guard as every other statement, so an
+// answer at all is the proof. The next check judges the reading.
 func readonly(ctx context.Context, p *preflight) (string, error) {
 	reading, err := p.probe.Health(ctx)
 	if err != nil {
@@ -181,8 +171,7 @@ func readonly(ctx context.Context, p *preflight) (string, error) {
 }
 
 // health judges the reading the previous check took. An unreadable reading is
-// unknown, never healthy: not being able to see the floor is not the same as
-// being above it.
+// unknown, never healthy.
 func health(_ context.Context, p *preflight) (string, error) {
 	if err := engine.Assert(p.health, "a build"); err != nil {
 		return "", err
@@ -195,10 +184,9 @@ func health(_ context.Context, p *preflight) (string, error) {
 		" GB of OS memory free", nil
 }
 
-// runDoctor walks the checks and reports every one, whatever happened to the
-// others. A failure stops the run — each check depends on the one before it —
-// but the remaining rows are still printed as skipped, so the output always has
-// the same shape and a reader can see how far it got.
+// runDoctor walks the checks and reports every one. A failure stops the run,
+// but the remaining rows still print as skipped, so the output keeps one shape
+// and a reader can see how far it got.
 func runDoctor(ctx context.Context, f *cmdutil.Factory, named string, open opener) error {
 	name, entry, err := resolveConnection(f, named)
 	if err != nil {
@@ -207,9 +195,6 @@ func runDoctor(ctx context.Context, f *cmdutil.Factory, named string, open opene
 	state := &preflight{factory: f, name: name, entry: entry, open: open}
 	defer state.close()
 
-	// A preflight that hangs is a preflight nobody runs. The bound is the same
-	// one `connection add` verifies under: generous for a distant KDC, short
-	// enough that a host silently dropping packets returns.
 	ctx, cancel := context.WithTimeout(ctx, probeTimeout)
 	defer cancel()
 
@@ -246,23 +231,17 @@ func row(c check, status, detail string) output.Record {
 	}
 }
 
-// close releases whatever the run opened. A preflight that failed before it
-// opened anything has nothing to release.
+// close releases whatever the run opened.
 func (p *preflight) close() {
 	if p.probe != nil {
 		_ = p.probe.Close()
 	}
 }
 
-// advise prints the one-line fix for the failures that have one, on their own
-// line, because these two are the failures a user cannot diagnose from the
-// driver's own words.
-//
-// The credential cache is the first thing everyone hits on macOS: the system
-// default cache type is API:, keychain-backed and readable by the system GSSAPI
-// alone, while the pure-Go driver reads FILE: caches only. Cross-realm is the
-// second: it surfaces as "Cannot generate SSPI context", which says nothing
-// about realms and sends the reader looking in the wrong place.
+// advise prints the one-line fix for the two failures a user cannot diagnose
+// from the driver's own words: macOS defaults to an API: credential cache that
+// the pure-Go driver, which reads FILE: only, cannot see; and a cross-realm
+// setup surfaces as "Cannot generate SSPI context", which never mentions realms.
 func advise(f *cmdutil.Factory, err error) {
 	var cache *connect.CredentialCacheError
 	if errors.As(err, &cache) {

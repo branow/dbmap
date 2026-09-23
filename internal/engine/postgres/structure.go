@@ -9,8 +9,7 @@ import (
 )
 
 // source is one metadata query and how to fold its rows into a structure.
-// Sources are data so that adding one is a row rather than a branch, and so a
-// test can assert what this engine would send with no server behind it.
+// Sources are data so adding one is a row rather than a branch.
 type source struct {
 	Name string
 	SQL  func() string
@@ -33,9 +32,8 @@ type indexRow struct {
 	column  string
 }
 
-// sources is the structure stage. Every one reads pg_catalog only, so no user
-// data page is touched. Postgres has no synonyms, so it has one source fewer
-// than SQL Server rather than an empty one.
+// sources is the structure stage, reading pg_catalog only so no user data page
+// is touched. Postgres has no synonyms, hence one source fewer than SQL Server.
 var sources = []source{
 	{
 		Name:  "columns",
@@ -154,10 +152,9 @@ ORDER BY 1, 2, 6`
 	},
 }
 
-// splitType separates what format_type renders into the type a reader names and
-// the width it carries. The parenthetical is not always at the end —
-// "timestamp(3) without time zone" puts it in the middle — so the width is
-// lifted out of wherever it sits rather than chopped off a suffix.
+// splitType separates what format_type renders into a type name and its width.
+// The parenthetical is not always at the end — "timestamp(3) without time zone"
+// puts it in the middle — so it is lifted out rather than chopped off a suffix.
 func splitType(rendered string) (kind, length string) {
 	open := strings.Index(rendered, "(")
 	if open < 0 {

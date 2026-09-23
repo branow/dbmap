@@ -11,8 +11,8 @@ import (
 	"github.com/branow/dbmap/internal/output"
 )
 
-// newBackend builds the llm backend namespace. It is independent of the
-// connection namespace on purpose: one api key serves every database.
+// newBackend builds the llm backend namespace, independent of the connection
+// namespace on purpose: one api key serves every database.
 func newBackend(f *cmdutil.Factory) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "backend",

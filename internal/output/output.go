@@ -1,5 +1,5 @@
 // Package output renders command results. A command builds records and never
-// decides how they look; the format chosen by -o picks the writer.
+// decides how they look; -o picks the writer.
 package output
 
 import (
@@ -10,7 +10,7 @@ import (
 	"strings"
 )
 
-// Format names a rendering. It is validated once, where the flag is read.
+// Format names a rendering, validated once where the flag is read.
 type Format string
 
 // The formats dbmap ships. Adding one means adding a writer to writers.
@@ -30,8 +30,8 @@ func (e *UnknownFormatError) Error() string {
 		e.Value, strings.Join(e.Allowed, ", "))
 }
 
-// Field is one named value of a record. Fields are ordered, so table columns
-// and JSON keys always agree with the order the command declared.
+// Field is one named value of a record. Fields are ordered, so columns and JSON
+// keys follow the order the command declared.
 type Field struct {
 	Name  string
 	Value any
@@ -50,8 +50,7 @@ func (r Record) Get(name string) (any, bool) {
 	return nil, false
 }
 
-// MarshalJSON keeps the declared field order, which encoding/json would lose
-// through a map.
+// MarshalJSON keeps the declared field order, which a map would lose.
 func (r Record) MarshalJSON() ([]byte, error) {
 	var b strings.Builder
 	b.WriteByte('{')
@@ -83,8 +82,8 @@ type Writer interface {
 	Show(rec Record) error
 	// Value renders one scalar, for a lookup such as `config get`.
 	Value(v any) error
-	// Note renders a human-facing status line. A machine-readable format drops
-	// it, because a status line is not part of the document.
+	// Note renders a status line. A machine-readable format drops it: a status
+	// line is not part of the document.
 	Note(text string) error
 }
 

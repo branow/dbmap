@@ -1,18 +1,13 @@
-// Package sqlserver reads a SQL Server catalog. It owns the sys.objects type
-// codes, the excluded schemas and the shape of every query this tool sends to
-// SQL Server, and it hands the result up as catalog vocabulary.
+// Package sqlserver reads a SQL Server catalog, owning the sys.objects type
+// codes, the excluded schemas and the shape of every query sent to SQL Server.
 //
-// Two rules shape every query here, both from the same measured incident:
-//
-// Row counts and sizes come from sys.dm_db_partition_stats, which reads stored
-// page totals. COUNT(*) and sp_spaceused scan, and the estate this was measured
-// against holds 606 tables over 563 GB with a largest table of 616,802,364 rows
-// — scanning it is how a build stops being a build and becomes an outage.
-//
-// Every statement carries OPTION (MAXDOP 1, MAX_GRANT_PERCENT = 1). The grant
-// cap is the load-bearing half: a query wanting more memory spills to tempdb
-// instead of taking RAM the operating system needs. MAXDOP 1 stops a parallel
-// plan from multiplying the footprint per thread.
+// Two rules shape every query, both from the same incident. Row counts and
+// sizes come from sys.dm_db_partition_stats, which reads stored page totals,
+// because COUNT(*) and sp_spaceused scan and a scan of a large table is an
+// outage. And every statement carries OPTION (MAXDOP 1, MAX_GRANT_PERCENT = 1):
+// the grant cap makes a hungry query spill to tempdb instead of taking RAM the
+// operating system needs, and MAXDOP 1 stops a parallel plan from multiplying
+// that footprint per thread.
 package sqlserver
 
 import (
@@ -24,24 +19,23 @@ import (
 )
 
 // MaxGrantPercent ceilings a statement's memory grant at 1% of the workspace
-// limit. Verified working on SQL Server 2019 (15.0.4430.1, compat 150).
+// limit.
 const MaxGrantPercent = 1
 
-// Option is the guard appended to every statement. It is a suffix rather than
-// a session setting because SQL Server has no read-only transaction mode to
-// hang a session guarantee on; the read-only connection intent carries that
-// half, and this carries the resource half.
+// Option is the guard appended to every statement. It is a suffix rather than a
+// session setting because SQL Server has no read-only transaction mode; the
+// read-only connection intent carries that half.
 const Option = "OPTION (MAXDOP 1, MAX_GRANT_PERCENT = 1)"
 
-// trailingSemicolon is stripped before the OPTION clause is appended, because
-// OPTION belongs to the statement and a semicolon would have ended it.
+// trailingSemicolon is stripped before OPTION is appended, because a semicolon
+// would have ended the statement OPTION belongs to.
 var trailingSemicolon = regexp.MustCompile(`;\s*$`)
 
 // Engine is the SQL Server implementation of engine.Engine.
 type Engine struct{}
 
-// New returns the SQL Server engine. It holds no state: a connection is passed
-// per call, so one engine value serves every database in a run.
+// New returns the SQL Server engine. It holds no state, so one value serves
+// every database in a run.
 func New() *Engine { return &Engine{} }
 
 // Name is the engine name as config spells it.
@@ -83,13 +77,11 @@ func (e *Engine) halt(ctx context.Context, conn engine.Conn, stage string) error
 	return engine.Assert(health, stage)
 }
 
-// flag reads a SQL Server bit column, which arrives as "1" or "0".
 // flag reads a catalog boolean. Drivers disagree about how a SQL bit reaches a
-// string scan — go-mssqldb hands back a Go bool, which reads as "true", while a
-// catalog queried through other paths renders the same column as "1". Accepting
-// both is boundary parsing, not defensiveness: reading only one spelling made
-// every flag silently false, so nullable columns were written "not null" and a
-// primary key was indexed as an ordinary index.
+// string scan: go-mssqldb hands back a Go bool reading as "true", other paths
+// render the same column as "1". Reading only one spelling made every flag
+// silently false, so nullable columns were written "not null" and a primary key
+// was indexed as an ordinary index.
 func flag(cell string) bool {
 	switch strings.ToLower(strings.TrimSpace(cell)) {
 	case "1", "true", "t", "yes", "y":
@@ -98,8 +90,7 @@ func flag(cell string) bool {
 	return false
 }
 
-// cells trims every cell of a row, because the catalog pads nothing but the
-// parsers should not care either way.
+// cells trims every cell of a row, so a parser never sees CHAR padding.
 func cells(row []string) []string {
 	out := make([]string, len(row))
 	for i, cell := range row {

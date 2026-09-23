@@ -1,7 +1,5 @@
 // Package enginetest is the in-memory Conn both engine implementations are
-// tested against. No test in this repo opens a database; an engine is proven by
-// what it asks for and what it makes of the answer, and both halves are pure
-// once the connection is a fake.
+// tested against, so no test opens a database.
 package enginetest
 
 import (
@@ -13,9 +11,9 @@ import (
 	"github.com/branow/dbmap/internal/engine"
 )
 
-// Conn is a scripted engine.Conn. Answers are matched by substring against the
-// statement, in the order they were registered, so a test names the fragment
-// that identifies a query rather than repeating the whole of it.
+// Conn is a scripted engine.Conn. Answers match by substring in registration
+// order, so a test names the fragment that identifies a query rather than
+// repeating the whole of it.
 type Conn struct {
 	answers []answer
 	calls   []Call
@@ -36,7 +34,7 @@ type answer struct {
 }
 
 // New returns a connection that answers nothing. An unmatched statement returns
-// no rows rather than failing, so a test only scripts the queries it is about.
+// no rows rather than failing, so a test scripts only the queries it is about.
 func New() *Conn { return &Conn{} }
 
 // On registers rows for every statement containing match.
@@ -45,8 +43,7 @@ func (c *Conn) On(match string, rows [][]string) *Conn {
 	return c
 }
 
-// Fail registers an error for every statement containing match, which is how a
-// test drives the path where the account cannot see a catalog view.
+// Fail registers an error for every statement containing match.
 func (c *Conn) Fail(match string, err error) *Conn {
 	c.answers = append(c.answers, answer{match: match, err: err})
 	return c
@@ -125,8 +122,7 @@ func (r *rows) Close() error {
 }
 
 // Scan fills the sql.NullString destinations the query path asks for. A cell
-// written as the empty string arrives as a NULL, which is what the engines'
-// parsers have to cope with anyway.
+// written as the empty string arrives as a NULL, matching a real driver.
 func (r *rows) Scan(dest ...any) error {
 	row := r.data[r.at-1]
 	for i := range dest {

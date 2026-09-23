@@ -9,24 +9,17 @@ import (
 	"github.com/branow/dbmap/llm"
 )
 
-// Budget sizes one batch. Objects are wildly uneven — a 200-line procedure and
-// a two-column lookup table are not the same unit of work — so a batch is
-// measured in prompt characters first and object count second.
-//
-// Roughly 100 calls for 1,237 objects instead of 1,237.
+// Budget sizes one batch. Objects are wildly uneven, so a batch is measured in
+// prompt characters first and object count second.
 const (
 	BatchChars = 40000
 	BatchMax   = 12
 )
 
-// sentenceField is the load-bearing wording. The field is `sentence`, and its
-// schema text is an ORDER rather than a noun phrase.
-//
-// Named `description` with the text "one sentence saying what this object
-// does", every model tested filled it with a description of the field instead
-// of an answer, and the better the model followed instructions the more
-// reliably it did so. Renaming the field and rewriting the text as an
-// instruction fixed every case. Do not soften either; a test fails if you do.
+// sentenceField is load-bearing wording. The field is named `sentence` and its
+// schema text is an ORDER, not a noun phrase: called `description` with a noun
+// phrase, every model tested returned a description of the field instead of an
+// answer. Do not soften either; a test fails if you do.
 const sentenceField = "Put the finished sentence here verbatim. Never describe what the sentence would say."
 
 // Schema is the structured output one batch must return. Answers carry the
@@ -79,9 +72,8 @@ type reply struct {
 type Result struct {
 	Sentences map[string]string
 	Lookups   map[string]bool
-	// Missing lists objects the model skipped. They are reported rather than
-	// left silently blank, because a blank description in the index looks like
-	// a described object with nothing to say.
+	// Missing lists objects the model skipped, reported rather than left blank:
+	// a blank description reads as a described object with nothing to say.
 	Missing []string
 	// Failed lists batches that errored. A failed batch is skipped, never
 	// fatal: a partial index beats none.
@@ -175,11 +167,9 @@ func BatchPrompt(items []Item) string {
 	return strings.Join(blocks, "\n\n")
 }
 
-// All describes every input it can, in batches.
-//
-// A batch that fails is logged and skipped rather than aborting the run: a
-// partial index is worth more than none, and the failure is reported on Result
-// so a caller can decide otherwise.
+// All describes every input it can, in batches. A failing batch is logged,
+// skipped and reported on Result rather than aborting the run: a partial index
+// is worth more than none.
 func All(ctx context.Context, client llm.Client, inputs []Input, opts Options) (Result, error) {
 	result := Result{Sentences: map[string]string{}, Lookups: map[string]bool{}}
 

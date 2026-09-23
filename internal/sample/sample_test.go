@@ -50,8 +50,7 @@ func table(name string, rows int64, columns ...catalog.Column) catalog.Entry {
 func col(name, typ string) catalog.Column { return catalog.Column{Name: name, Type: typ} }
 
 // A column whose name says it holds a person's data is never read. The name is
-// the only signal available: an nvarchar(50) is a product code or a surname and
-// the catalog cannot tell you which.
+// the only signal: a type cannot tell a product code from a surname.
 func TestPIIColumnsAreNeverProjected(t *testing.T) {
 	entry := table("Customers", 100,
 		col("CustomerID", "int"),
@@ -123,11 +122,10 @@ func TestOpaqueColumnsAreExcluded(t *testing.T) {
 	}
 }
 
-// The regression that matters. Long string types are the value domain: a status
-// lookup's meaning lives in its name column, not its integer key. Excluding them
-// once made a three-row lookup sample project nothing but an id, and the
-// describer never saw the values the whole design exists to capture. Every cell
-// is capped anyway, so unboundedness is not a reason to withhold one.
+// The regression that matters. A lookup table's meaning lives in its name
+// column, not its integer key: excluding long string types once made such a
+// table project nothing but an id. Every cell is capped anyway, so
+// unboundedness is not a reason to withhold one.
 func TestOrdinaryStringColumnsAreSampled(t *testing.T) {
 	cases := []catalog.Column{
 		{Name: "Name", Type: "text"},
@@ -204,9 +202,8 @@ func TestWithheldColumnsSurfaceInTheOutput(t *testing.T) {
 	}
 }
 
-// The single most valuable ordering decision in the tool: a capped run spends
-// its budget on the tables whose rows ARE their value domain, not on 25 rows off
-// the front of a 616-million-row log.
+// A capped run must spend its budget on the tables whose rows ARE their value
+// domain, not on the front rows of a huge log.
 func TestCompleteTablesAreSampledFirst(t *testing.T) {
 	entries := []catalog.Entry{
 		table("HugeLog", 616802364, col("ID", "int")),

@@ -2,22 +2,20 @@ package credentials
 
 import "errors"
 
-// errMissing is what a backend reports when the item is simply not there. Each
-// platform's backend translates its own vocabulary into it, so the store above
-// has one meaning of "absent" to reason about.
+// errMissing is what a backend reports when the item is not there. Each
+// platform translates its own vocabulary into it, so the store above has one
+// meaning of "absent".
 var errMissing = errors.New("keychain item not found")
 
-// errBlocked is what a backend reports when the keychain would only hand the
-// item over after asking the user something: the item's access control no
-// longer names this binary, or the keychain wants to be unlocked. It is a
-// separate meaning from "absent" because it has its own way out, and because a
-// dbmap that let that question be asked where nobody can see it would block
-// forever instead of failing.
+// errBlocked is what a backend reports when the keychain would hand the item
+// over only after asking the user something. It is separate from "absent"
+// because it has its own way out, and because letting that question be asked
+// where nobody can see it would block forever instead of failing.
 var errBlocked = errors.New("the keychain did not authorize dbmap for this item")
 
-// ui says whether one keychain call may put the operating system's
-// authorization dialog on screen. The zero value refuses it: a store nobody
-// configured can fail, but it can never hang.
+// ui says whether a keychain call may put the OS authorization dialog on
+// screen. The zero value refuses: a store nobody configured may fail, never
+// hang.
 type ui bool
 
 const (
@@ -25,32 +23,31 @@ const (
 	allowUI ui = true
 )
 
-// Keychain stores secrets in the operating system's own credential store: the
-// Security framework on macOS, wincred on Windows, secret-service on Linux.
+// Keychain stores secrets in the OS credential store: the Security framework on
+// macOS, wincred on Windows, secret-service on Linux. The item is addressed by
+// service plus account, the account being our own key - db:<name> or llm:<name>.
 //
-// The three operations are fields rather than direct calls so a unit test can
-// drive every branch, including an unavailable keychain, without one being
-// present. The item is addressed by service plus account, and the account is
-// our own key - db:<name> or llm:<name>.
+// The three operations are fields so a unit test can drive every branch,
+// including an unavailable keychain, with no keychain present.
 type Keychain struct {
 	Service string
 
 	// ui carries the caller's answer to "may this prompt". It belongs to the
-	// session, decided once at startup from the streams and --no-input, not to
-	// an individual read, so every call made through this store shares it.
+	// session, decided once at startup, so every call through this store
+	// shares it.
 	ui     ui
 	get    func(service, account string, allow ui) (string, error)
 	set    func(service, account, secret string, allow ui) error
 	remove func(service, account string, allow ui) error
 }
 
-// NewKeychain returns a store backed by the OS keychain that never lets the
-// keychain ask the user anything. Prompting is opt-in through Options, because
-// the caller is the only one that knows whether a human is watching a terminal.
+// NewKeychain returns an OS-keychain store that never lets the keychain ask the
+// user anything. Prompting is opt-in through Options, because only the caller
+// knows whether a human is watching a terminal.
 func NewKeychain(service string) *Keychain { return newKeychain(service, noUI) }
 
-// newKeychain wires the platform backend with an explicit answer to whether a
-// call may prompt.
+// newKeychain wires the platform backend with an explicit answer to "may this
+// call prompt".
 func newKeychain(service string, allow ui) *Keychain {
 	if service == "" {
 		service = Service

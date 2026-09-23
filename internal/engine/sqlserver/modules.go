@@ -8,18 +8,8 @@ import (
 	"github.com/branow/dbmap/internal/redact"
 )
 
-// modulesQuery fetches the bodies of the named objects.
-//
-// A definition holds tabs and newlines, which is why the reference
-// implementation had to introduce a sentinel line carrying an object id and
-// split the batch on it: it was reading sqlcmd's tab-separated stdout, where a
-// procedure containing a tab was a bug waiting to be filed. A driver returns a
-// body as an ordinary column value, so the sentinel, the raw output mode and
-// the flag conflict that forced them are all gone. Nothing replaces them.
-//
-// Keys ride as parameters rather than as interpolated text. They come from this
-// tool's own manifest, but a catalog query built by concatenation is a habit
-// worth not having.
+// modulesQuery fetches the bodies of the named objects. Keys ride as parameters
+// rather than interpolated text.
 func modulesQuery(n int) string {
 	return `SELECT s.name + '.' + o.name, LEFT(m.definition, ` +
 		strconv.Itoa(engine.MaxDefinition) + `)
@@ -30,13 +20,10 @@ WHERE ` + inScope() + `
   AND s.name + '.' + o.name IN (` + engine.Placeholders("@p", n) + `)`
 }
 
-// parseModules reads body rows into a map keyed by object key. A body that came
-// back empty is omitted rather than recorded as empty, so a later stage can
-// tell "no body" from "a body that is blank".
-//
-// Redaction happens here, on the row, because this is the moment a body
-// arrives: nothing downstream can receive an unredacted one, because
-// redact.Body is the only thing this returns and only the redactor makes them.
+// parseModules reads body rows into a map keyed by object key. An empty body is
+// omitted rather than stored, so a later stage can tell "no body" from "blank".
+// Redaction happens here, the moment a body arrives, so nothing downstream can
+// hold an unredacted one.
 func parseModules(rows [][]string) map[string]redact.Body {
 	bodies := make(map[string]redact.Body, len(rows))
 	for _, row := range rows {
@@ -48,14 +35,10 @@ func parseModules(rows [][]string) map[string]redact.Body {
 	return bodies
 }
 
-// Modules fetches module bodies in batches, asking for room between each: a run
-// that began on a healthy server still stops if it stops being one.
-//
-// A body is redacted the moment it arrives, before it can be cached and long
-// before it can reach a prompt. Procedure bodies are where credentials end up
-// in practice — a connection string in a linked-server call, a key in an HTTP
-// helper — and the tally rides along on each Body so a build can report that it
-// found one rather than silently swallowing it.
+// Modules fetches module bodies in batches, asking for room between each so a
+// run that began on a healthy server still stops if it stops being one.
+// Procedure bodies are where credentials turn up in practice, so each body is
+// redacted on arrival and carries the tally of what was found.
 func (e *Engine) Modules(
 	ctx context.Context,
 	conn engine.Conn,

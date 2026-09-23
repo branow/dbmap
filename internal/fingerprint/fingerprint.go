@@ -1,18 +1,13 @@
 // Package fingerprint decides what "changed" means for each kind of object.
 //
-// Two different signals guard two different costs. A modify signal decides
-// whether to FETCH: free, never misses a real change, but over-reports, because
-// a release that ALTERs 58 procedures bumps all 58 dates even when most are
-// byte-identical to what was already deployed. A content fingerprint decides
-// whether to DESCRIBE. Fetching is seconds; describing is an LLM call per
-// object, so the exact check guards the expensive stage and the loose one
-// guards the cheap stage.
+// Staleness is two-tier because two signals guard two very different costs. A
+// modify signal gates FETCH: free and never misses a change, but over-reports.
+// A content fingerprint gates DESCRIBE, which is an LLM call per object, so the
+// exact check guards the expensive stage and the loose one the cheap stage.
 //
-// A module fingerprints over its definition. A table has no definition, so it
-// fingerprints over the structure a reader would need — columns with their
-// types and nullability, keys, indexes, trigger count — plus its sample depth.
-//
-// Sample row VALUES are deliberately absent. They change on every run against a
+// A module fingerprints over its definition; a table has none, so it
+// fingerprints over the structure a reader would need plus its sample depth.
+// Sample row VALUES are deliberately absent: they change on every run against a
 // live database and would leave every table permanently dirty.
 package fingerprint
 
@@ -26,24 +21,18 @@ import (
 	"github.com/branow/dbmap/internal/catalog"
 )
 
-// SampleRows is how many rows the describer is sent, and therefore the row
-// count above which a table growing tells the describer nothing new: the first
-// 25 rows of a 40-row table and of a 60-row table are the same 25 rows.
-//
-// 25 because 148 of the 491 non-empty measured tables hold 25 rows or fewer —
-// the lookup and enum tables, where every row is a value worth naming and the
-// sample is the whole table. Past 25 the distribution flattens: raising it to
-// 30 covers five more tables.
+// SampleRows is how many rows the describer is sent, and so the row count above
+// which a table growing tells it nothing new. 25 is chosen from the measured
+// row-count distribution (see docs/DESIGN.md).
 const SampleRows = 25
 
-// digits is how much of the hash is kept. 16 hex characters is 64 bits, which
-// is collision-proof enough for a few thousand objects and short enough to sit
-// in a TSV row a human reads.
+// digits keeps 64 bits of the hash: collision-proof enough for a few thousand
+// objects, short enough to sit in a TSV row a human reads.
 const digits = 16
 
 // SampleDepth is how many rows the describer actually gets to see. Below
-// SampleRows a table growing by one row changes what the model reads, so the
-// description is stale; at or above it, growth changes nothing.
+// SampleRows growth changes what the model reads; at or above it, growth
+// changes nothing, which is what keeps a growing table from redescribing.
 func SampleDepth(rows int64) int64 {
 	if rows < 0 {
 		return 0
@@ -60,9 +49,9 @@ func Sum(text string) string {
 	return hex.EncodeToString(sum[:])[:digits]
 }
 
-// Normalize strips the differences deployment tools introduce without the code
-// differing: line endings, trailing whitespace per line, and surrounding blank
-// space. A tool rewriting a file to CRLF must not read as an edit.
+// Normalize strips line endings, per-line trailing whitespace and surrounding
+// blank space, so a deployment tool rewriting a file to CRLF does not read as
+// an edit.
 func Normalize(definition string) string {
 	lines := strings.Split(strings.ReplaceAll(definition, "\r\n", "\n"), "\n")
 	for i, line := range lines {
@@ -74,10 +63,9 @@ func Normalize(definition string) string {
 // Module fingerprints a view, procedure or function over its body.
 func Module(definition string) string { return Sum(Normalize(definition)) }
 
-// CanonicalTable is the exact text a table's fingerprint is taken over. It is
-// built as explicit lines rather than by hashing a struct or its JSON, so the
-// hash cannot move when an unrelated field is added to the structure the fetch
-// stage happens to return.
+// CanonicalTable is the exact text a table's fingerprint is taken over. Built
+// as explicit lines rather than by hashing the struct, so the hash cannot move
+// when an unrelated field is added to Structure.
 func CanonicalTable(object catalog.Object, structure catalog.Structure) string {
 	lines := make([]string, 0, len(structure.Columns)+len(structure.Indexes)+4)
 	for _, c := range structure.Columns {
@@ -125,7 +113,6 @@ func synonym(_ catalog.Object, structure catalog.Structure) string {
 	return Sum(structure.Target)
 }
 
-// fingerprinters dispatches on kind so callers never branch on one themselves.
 var fingerprinters = map[catalog.Kind]func(catalog.Object, catalog.Structure) string{
 	catalog.Table:     Table,
 	catalog.View:      module,

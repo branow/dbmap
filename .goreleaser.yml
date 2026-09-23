@@ -1,0 +1,92 @@
+version: 2
+
+project_name: dbmap
+
+# macOS builds are cgo builds: the keychain backend calls the Security framework
+# directly so that each stored secret is bound to the binary that stored it.
+# That means darwin artifacts must be built on a macOS runner, one per arch —
+# a cgo build cannot cross-compile or emit both from one invocation. Linux and
+# Windows have no such requirement and stay on CGO_ENABLED=0, where the keychain
+# falls back to the platform's own credential store.
+builds:
+  - id: unix
+    main: .
+    binary: dbmap
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, windows]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+
+  - id: macos
+    main: .
+    binary: dbmap
+    env:
+      - CGO_ENABLED=1
+    goos: [darwin]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+
+universal_binaries:
+  - ids: [macos]
+    replace: true
+
+archives:
+  - formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: checksums.txt
+
+homebrew_casks:
+  - name: dbmap
+    repository:
+      owner: branow
+      name: homebrew-tap
+      token: "{{ .Env.TAP_GITHUB_TOKEN }}"
+    directory: Casks
+    homepage: https://github.com/branow/dbmap
+    description: Index a database into a compact map an agent can read in one pass
+    # The binaries carry no Apple Developer ID, so strip the quarantine flag
+    # Homebrew sets on cask downloads; Gatekeeper otherwise refuses to run them.
+    custom_block: |
+      postflight_steps do
+        if_path_exists "/usr/bin/xattr" do
+          run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ "{{staged_path}}" }}/dbmap"]
+        end
+      end
+
+nfpms:
+  - package_name: dbmap
+    ids: [unix]
+    formats: [deb, rpm, apk]
+    maintainer: Orest Bodnar <branow.code@gmail.com>
+    homepage: https://github.com/branow/dbmap
+    description: Index a database into a compact map an agent can read in one pass
+    license: MIT
+    bindir: /usr/bin
+
+scoops:
+  - name: dbmap
+    repository:
+      owner: branow
+      name: scoop-bucket
+      token: "{{ .Env.TAP_GITHUB_TOKEN }}"
+    directory: bucket
+    homepage: https://github.com/branow/dbmap
+    description: Index a database into a compact map an agent can read in one pass
+    license: MIT
+
+changelog:
+  use: git

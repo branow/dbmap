@@ -11,30 +11,21 @@ import (
 	"github.com/jcmturner/gokrb5/v8/spnego"
 )
 
-// pgx ships the hook for GSSAPI authentication but no implementation of it, and
-// points at a third-party package that is four stars old and last pushed in
-// January 2023. The interface is three methods over a Kerberos stack this build
-// already carries for SQL Server, so it is implemented here instead of
-// depended on.
-//
-// The payoff is that both engines now authenticate through the same stack: the
-// same FILE: credential cache, the same kinit remedy, and the same single-realm
-// limitation. One story to document, one thing to print when it goes wrong.
+// pgx ships the hook for GSSAPI authentication but no implementation, pointing
+// at an unmaintained third-party package. The interface is three methods over
+// the Kerberos stack this build already carries for SQL Server, so it is
+// implemented here and both engines share one credential cache, one remedy and
+// one single-realm limitation.
 
 // DefaultConfig is where the realm configuration is read from when KRB5_CONFIG
 // names nothing.
 const DefaultConfig = "/etc/krb5.conf"
 
-// The GSS provider is process-global state: pgconn.RegisterGSSProvider sets one
-// function for the whole program, and the factory it calls is handed no
-// connection to look at. So the registration happens once, at pool
-// construction rather than in an init — a library that seizes a global on
-// import is rude to whoever imports it next — and the credential cache the
-// factory should use is kept beside it.
-//
-// The consequence is honest and worth stating: with two Postgres Kerberos
-// connections open in one process against two different caches, the most
-// recently opened one wins. This tool indexes one database per run.
+// The GSS provider is process-global: RegisterGSSProvider sets one function for
+// the program and the factory it calls sees no connection, so the cache lives
+// here beside it and registration happens at pool construction rather than in
+// an init. The consequence: with two Kerberos Postgres connections open against
+// different caches, the most recent wins. This tool indexes one per run.
 var (
 	gssOnce  sync.Once
 	gssMu    sync.Mutex
@@ -53,9 +44,8 @@ func useGSS(cache string) {
 	})
 }
 
-// newGSS builds a provider bound to whichever cache was most recently resolved.
-// The cache is read at exchange time rather than captured here, so a ticket
-// refreshed between pool construction and login is the one that gets used.
+// newGSS builds a provider bound to whichever cache was most recently resolved,
+// read at exchange time so a ticket refreshed since pool construction wins.
 func newGSS() (pgconn.GSS, error) {
 	gssMu.Lock()
 	cache := gssCache
@@ -66,12 +56,9 @@ func newGSS() (pgconn.GSS, error) {
 	}, nil
 }
 
-// exchange is the half of the negotiation that needs a live KDC: it trades the
-// ticket-granting ticket in the credential cache for a service ticket and wraps
-// that in the first token. It is an interface because it is the ONLY part of
-// this file that cannot be tested without a KDC — everything around it is byte
-// handling and a state machine, and both are driven by tests against scripted
-// tokens.
+// exchange trades the credential cache's ticket-granting ticket for a service
+// ticket and wraps it in the first token. It is an interface because it is the
+// only part of this file that cannot be tested without a live KDC.
 type exchange interface {
 	Init() ([]byte, error)
 }
@@ -123,21 +110,17 @@ func configPath(env environment) string {
 	return DefaultConfig
 }
 
-// gss implements pgconn.GSS. It holds one exchange at a time, because a
-// connection authenticates once.
+// gss implements pgconn.GSS, holding one exchange because a connection
+// authenticates once.
 type gss struct {
 	open    func(spn string) (exchange, error)
 	started bool
 }
 
 // GetInitToken builds the service principal from the host and service pgx was
-// configured with.
-//
-// The host is used as given, lowercased. It is deliberately not resolved
-// through DNS first: reverse-resolving a host to find its "real" name is the
-// rdns behaviour that modern Kerberos deployments turn off, and doing it here
-// would make the principal depend on whichever DNS answer arrived. A
-// deployment that needs a different principal sets krbspn on the connection.
+// configured with. The host is used as given, lowercased, and deliberately not
+// reverse-resolved: rdns is off in modern Kerberos deployments, and resolving
+// would make the principal depend on whichever DNS answer arrived.
 func (g *gss) GetInitToken(host, service string) ([]byte, error) {
 	return g.GetInitTokenFromSPN(service + "/" + canonical(host))
 }
@@ -162,11 +145,9 @@ func (g *gss) GetInitTokenFromSPN(spn string) ([]byte, error) {
 }
 
 // Continue reads the server's answer and says whether the exchange is done.
-//
-// For Kerberos the negotiation is one round: the client sends its ticket and
-// the server accepts or rejects it. A server asking to continue is asking for a
-// mechanism negotiation this build does not perform, and saying so is better
-// than returning an empty token and looping until something times out.
+// Kerberos negotiates in one round, so a server asking to continue wants a
+// mechanism this build does not offer; saying so beats looping until a
+// timeout.
 func (g *gss) Continue(in []byte) (done bool, out []byte, err error) {
 	if !g.started {
 		return false, nil, &KerberosError{

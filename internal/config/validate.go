@@ -6,16 +6,15 @@ import (
 	"strconv"
 )
 
-// auths lists which authentication modes each engine accepts. It is a table
-// walked by the validator, never an if-ladder: an engine gains a mode by
-// gaining a row here, with no command code touched.
+// auths lists which authentication modes each engine accepts. A table walked by
+// the validator, so an engine gains a mode by gaining a row.
 var auths = map[Engine][]Auth{
 	SQLServer: {SQLLogin, Kerberos},
 	Postgres:  {SCRAM, Kerberos},
 }
 
-// providers lists the llm providers and whether each one needs an api key. A
-// provider that needs none is never prompted for one.
+// providers lists the llm providers and whether each needs an api key; one that
+// needs none is never prompted for one.
 var providers = map[Provider]struct{ NeedsKey bool }{
 	Anthropic:  {NeedsKey: true},
 	OpenAI:     {NeedsKey: true},
@@ -25,12 +24,12 @@ var providers = map[Provider]struct{ NeedsKey bool }{
 // fallbacks lists the secret-storage policies.
 var fallbacks = []Fallback{Never, Plaintext}
 
-// secretless lists the auth modes that carry no password: the ticket or the
-// operating system supplies the credential.
+// secretless lists the auth modes that carry no password: the ticket or the OS
+// supplies the credential.
 var secretless = map[Auth]bool{Kerberos: true}
 
-// name is the shape of every entry name: an identifier a user types often and
-// that is safe inside a keychain key.
+// name is the shape of every entry name: safe to type, and safe in a keychain
+// key.
 var name = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
 
 // Engines lists the supported engines.
@@ -78,8 +77,8 @@ func NeedsPassword(a Auth) bool { return !secretless[a] }
 // NeedsAPIKey reports whether a provider requires a stored api key.
 func NeedsAPIKey(p Provider) bool { return providers[p].NeedsKey }
 
-// Validate checks the whole file: every entry is well formed and every profile
-// binds names that exist. External input is validated once, here.
+// Validate checks the whole file: every entry well formed, every profile
+// binding names that exist. External input is validated once, here.
 func (c *Config) Validate() error {
 	for entry, value := range c.Connections {
 		if err := validateConnection(entry, value); err != nil {
@@ -194,5 +193,5 @@ func ParseProvider(value string) (Provider, error) {
 }
 
 // NeedsUsername reports whether an auth mode requires a login name. Kerberos
-// takes the identity from the ticket, so it needs none.
+// takes the identity from the ticket.
 func NeedsUsername(a Auth) bool { return !secretless[a] }

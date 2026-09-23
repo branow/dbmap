@@ -21,19 +21,16 @@ import (
 	"github.com/branow/dbmap/llm/provider"
 )
 
-// DefaultOut is where the index tree lands when --out is not given: a directory
-// beside the project it describes, so the index travels with the checkout that
-// needs it.
+// DefaultOut is where the index tree lands when --out is not given: beside the
+// project it describes, so the index travels with the checkout that needs it.
 const DefaultOut = ".dbmap"
 
 // Concurrency bounds how many model calls may be in flight. The describe stage
-// is sequential today, so this is a ceiling rather than a target: it is here so
-// a provider's concurrency limit stays honoured if that ever changes.
+// is sequential today, so this is a ceiling rather than a target.
 const Concurrency = 4
 
-// indexOptions is the flag surface of `dbmap index`. --force lives on the root
-// as a persistent flag, so it is read off the factory rather than declared
-// again here.
+// indexOptions is the flag surface of `dbmap index`. --force is a persistent
+// root flag, so it is read off the factory rather than declared again here.
 type indexOptions struct {
 	database string
 	match    string
@@ -44,8 +41,8 @@ type indexOptions struct {
 	dryRun   bool
 }
 
-// newIndex builds the command that produces the index. Everything it does is
-// resolution and reporting: the stage order lives in internal/index.
+// newIndex builds the command that produces the index. It only resolves and
+// reports: the stage order lives in internal/index.
 func newIndex(f *cmdutil.Factory) *cobra.Command {
 	opts := indexOptions{samples: -1}
 	cmd := &cobra.Command{
@@ -80,8 +77,7 @@ func newIndex(f *cmdutil.Factory) *cobra.Command {
 	return cmd
 }
 
-// arg is the connection named on the command line, or empty to mean the active
-// profile's.
+// arg is the connection named on the command line, or empty for the profile's.
 func arg(args []string) string {
 	if len(args) == 0 {
 		return ""
@@ -89,9 +85,9 @@ func arg(args []string) string {
 	return args[0]
 }
 
-// runIndex resolves everything the pipeline needs, runs it, and reports what it
-// did. A dry run stops before a pool is ever opened for anything but the
-// manifest, which is what makes it safe rather than merely quiet.
+// runIndex resolves what the pipeline needs, runs it, and reports what it did.
+// A dry run opens no pool for anything but the manifest, which is what makes it
+// safe rather than merely quiet.
 func runIndex(ctx context.Context, f *cmdutil.Factory, connection string,
 	opts *indexOptions) error {
 	connection, entry, err := resolveConnection(f, connection)
@@ -111,8 +107,7 @@ func runIndex(ctx context.Context, f *cmdutil.Factory, connection string,
 	if err != nil {
 		return err
 	}
-	// The pipeline closes the source before it describes; this is the belt for
-	// every path that returns before it gets there.
+	// Belt for the paths that return before the pipeline closes the source.
 	defer pool.Close()
 
 	source, err := index.Open(pool)
@@ -148,8 +143,8 @@ func runIndex(ctx context.Context, f *cmdutil.Factory, connection string,
 	return report(f, summary)
 }
 
-// resolveConnection answers which connection this build reads, honouring the
-// argument first and the active profile second.
+// resolveConnection answers which connection this build reads: the argument
+// first, the active profile second.
 func resolveConnection(f *cmdutil.Factory, named string) (string, config.Connection, error) {
 	if named == "" {
 		_, profile, err := f.Config.Active(config.Overrides{Profile: f.Flags.Profile})
@@ -168,9 +163,8 @@ func resolveConnection(f *cmdutil.Factory, named string) (string, config.Connect
 	return named, entry, nil
 }
 
-// resolveDatabase settles which database is indexed. It is external input, so
-// it is validated once, here: the name becomes a directory in the index tree
-// and must therefore be a single path segment.
+// resolveDatabase settles which database is indexed. The name becomes a
+// directory in the index tree, so it must be a single path segment.
 func resolveDatabase(entry config.Connection, override string) (string, error) {
 	database := override
 	if database == "" {
@@ -187,8 +181,8 @@ func resolveDatabase(entry config.Connection, override string) (string, error) {
 	return database, nil
 }
 
-// dbSecret fetches the connection's password. An auth mode that carries none —
-// Kerberos, where the ticket cache is the credential — is asked for nothing.
+// dbSecret fetches the connection's password. An auth mode that carries none -
+// Kerberos, where the ticket cache is the credential - is asked for nothing.
 func dbSecret(f *cmdutil.Factory, connection string,
 	entry config.Connection) (credentials.Secret, error) {
 	if !config.NeedsPassword(entry.Auth) {
@@ -197,13 +191,9 @@ func dbSecret(f *cmdutil.Factory, connection string,
 	return f.Store.Get(credentials.DBKey(connection))
 }
 
-// describer assembles the model client for this build, with the module's own
-// middleware around it rather than anything reimplemented here: retry for a
-// provider that rate-limits, a disk cache so a killed run resumes free, and a
-// concurrency ceiling.
-//
-// A dry run needs no client at all, and is the only build allowed to run
-// without one: an index with no descriptions is not what anyone asked for.
+// describer assembles the model client for this build behind the llm module's
+// own middleware: retry, a disk cache so a killed run resumes free, and a
+// concurrency ceiling. A dry run is the only build allowed to run without one.
 func describer(f *cmdutil.Factory, opts *indexOptions, cache string) (llm.Client, string, error) {
 	if opts.dryRun {
 		return nil, "", nil
@@ -236,8 +226,8 @@ func describer(f *cmdutil.Factory, opts *indexOptions, cache string) (llm.Client
 	return llm.WithConcurrency(client, Concurrency), entry.Model, nil
 }
 
-// resolveBackend answers which backend describes, honouring --backend first and
-// the active profile second.
+// resolveBackend answers which backend describes: --backend first, the active
+// profile second.
 func resolveBackend(f *cmdutil.Factory, named string) (string, config.Backend, error) {
 	if named == "" {
 		_, profile, err := f.Config.Active(config.Overrides{Profile: f.Flags.Profile})
@@ -256,9 +246,8 @@ func resolveBackend(f *cmdutil.Factory, named string) (string, config.Backend, e
 	return named, entry, nil
 }
 
-// cacheRoot is where the resumable fetch cache lives. It is deliberately not
-// inside the index tree: the tree is what an agent reads, and a cache of raw
-// catalog payloads is not part of that document.
+// cacheRoot is where the resumable fetch cache lives, deliberately outside the
+// index tree: that tree is the document an agent reads.
 func cacheRoot() (string, error) {
 	dir, err := os.UserCacheDir()
 	if err != nil {
@@ -267,8 +256,8 @@ func cacheRoot() (string, error) {
 	return filepath.Join(dir, "dbmap"), nil
 }
 
-// progress writes a build's stage lines to the error stream, which keeps them
-// out of the document the output writer produces.
+// progress writes a build's stage lines to the error stream, keeping them out
+// of the document the output writer produces.
 type progress struct {
 	io    *iostreams.IOStreams
 	quiet bool
@@ -285,9 +274,8 @@ func (p progress) write(message string) {
 	_, _ = p.io.ErrOut.Write([]byte(message + "\n"))
 }
 
-// report renders the summary. A dry run reports the plan and says so, because a
-// summary that looked like a completed build would be the worst possible
-// outcome of asking what a build would do.
+// report renders the summary, marking a dry run as one so its plan cannot be
+// mistaken for a completed build.
 func report(f *cmdutil.Factory, summary index.Summary) error {
 	record := output.Record{
 		{Name: "connection", Value: summary.Environment},
@@ -317,8 +305,8 @@ func report(f *cmdutil.Factory, summary index.Summary) error {
 	return f.Writer().Show(record)
 }
 
-// reasons renders the fetch tally in the planner's own order, so two builds
-// report the same thing the same way.
+// reasons renders the fetch tally in the planner's order, so two builds report
+// the same thing the same way.
 func reasons(counted map[plan.Reason]int) string {
 	var parts []string
 	for _, rule := range plan.FetchReasons {
@@ -332,8 +320,7 @@ func reasons(counted map[plan.Reason]int) string {
 	return strings.Join(parts, ", ")
 }
 
-// redactions names what was stripped out of module bodies. A build that found a
-// credential says so in its summary rather than leaving it to a log line.
+// redactions names what was stripped out of module bodies.
 func redactions(summary index.Summary) string {
 	if summary.Redactions.Total() == 0 {
 		return "none"

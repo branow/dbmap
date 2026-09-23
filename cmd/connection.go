@@ -30,8 +30,7 @@ func newConnection(f *cmdutil.Factory) *cobra.Command {
 }
 
 // connectionOptions is the flag surface of `connection add`. Every value is a
-// flag so a CI run needs no terminal, and every one is prompted for when it is
-// missing and a terminal is there.
+// flag so a CI run needs no terminal, and every one is prompted for otherwise.
 type connectionOptions struct {
 	engine     string
 	host       string

@@ -9,12 +9,12 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// FileName is the plaintext store's file. It is never committed: the
-// repository's ignore rules deny it by name.
+// FileName is the plaintext store's file; the repository's ignore rules deny it
+// by name.
 const FileName = "credentials.yml"
 
 // File stores secrets in a 0600 file next to the config. It exists only for
-// machines with no usable keychain, and it is reached only when the policy
+// machines with no usable keychain and is reached only when the policy
 // explicitly opts in: nothing falls back to it silently.
 type File struct{ Path string }
 

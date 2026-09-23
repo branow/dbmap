@@ -16,8 +16,7 @@ const (
 	KindSetting    Kind = "setting"
 )
 
-// NotFoundError reports a name that is not defined. The kind and the name are
-// fields, not text baked into a message, so a caller can act on them.
+// NotFoundError reports a name that is not defined.
 type NotFoundError struct {
 	Kind Kind
 	Name string
@@ -27,8 +26,7 @@ func (e *NotFoundError) Error() string {
 	return fmt.Sprintf("%s %q is not defined", e.Kind, e.Name)
 }
 
-// InvalidError reports a value that is not one this tool accepts. It carries
-// the offending field so a command can point at it without parsing a string.
+// InvalidError reports a value this tool does not accept.
 type InvalidError struct {
 	Field   string
 	Value   string
@@ -48,8 +46,8 @@ func (e *InvalidError) Error() string {
 	}
 }
 
-// InUseError reports a name another entry still points at. Removal refuses
-// rather than leaving a profile bound to something that no longer exists.
+// InUseError reports a name a profile still binds. Removal refuses rather than
+// leaving that profile bound to something gone.
 type InUseError struct {
 	Kind Kind
 	Name string

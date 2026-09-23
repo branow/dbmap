@@ -1,18 +1,15 @@
-// Package sample reads the first rows of a table for the describer, and
-// decides what may be read at all.
+// Package sample reads the first rows of a table for the describer, and decides
+// what may be read at all.
 //
-// Two rules shape everything here, and both exist because a previous attempt at
-// this work took a SQL Server instance down:
-//
-//   - the projection is planned before anything is sent, so a column holding a
-//     person's data is never read and a table of nothing but such columns is
-//     never queried at all
-//   - the run is ordered complete-tables-first, so a capped run spends its
-//     budget on the lookup tables that ARE their own value domains rather than
-//     on the first 25 rows of a 616-million-row log
+// Two rules shape everything here, and both exist because an earlier attempt at
+// this work overloaded a server: the projection is planned before anything is
+// sent, so a person's column is never read and a table of nothing but such
+// columns is never queried at all; and the run is ordered complete-tables-first,
+// so a capped run spends its budget on the lookup tables that ARE their own
+// value domains rather than on the first rows of a huge log.
 //
 // Sampled values are transient describer input. They never reach the index,
-// never enter a fingerprint, and nothing in this package persists one.
+// never enter a fingerprint, and nothing here persists one.
 package sample
 
 import (
@@ -25,9 +22,8 @@ import (
 	"github.com/branow/dbmap/internal/fingerprint"
 )
 
-// Fetcher is the half of an engine this package uses. Narrowing it to two
-// methods is what lets every test here run against a fake with no database
-// behind it.
+// Fetcher is the half of an engine this package uses, narrow enough that every
+// test here runs against a fake with no database behind it.
 type Fetcher interface {
 	Sample(ctx context.Context, conn engine.Conn, table engine.Table, n int) (catalog.Sample, error)
 	Health(ctx context.Context, conn engine.Conn) (engine.Health, error)
@@ -57,17 +53,10 @@ func (o Options) rows() int {
 	return o.Rows
 }
 
-// Order sorts plans complete-tables-first, so a capped run spends its budget
-// where a sample is worth most.
-//
-// A complete table is one the sample reads in full: its rows ARE its value
-// domain, which is how the distinct values of a status column get captured with
-// no DISTINCT scan anywhere. The measured estate held 45 such lookup tables in
-// one database, every one under 25 rows, against 20 tables over 100 million
-// rows where 25 rows off the front say almost nothing.
-//
-// Within each group the smaller table comes first, and ties break on key, so a
-// run is reproducible rather than dependent on map order.
+// Order sorts plans complete-tables-first: a table read in full has its whole
+// value domain captured with no DISTINCT scan, where the front rows of a huge
+// table say almost nothing. Within a group the smaller table comes first and
+// ties break on key, so a run does not depend on map order.
 func Order(plans []Plan, rows map[string]int64) []Plan {
 	ordered := make([]Plan, len(plans))
 	copy(ordered, plans)
@@ -103,15 +92,13 @@ func Plans(entries []catalog.Entry) []Plan {
 	return plans
 }
 
-// All samples the tables in entries, in value-domain-first order, and returns
-// what it read keyed by object.
+// All samples the tables in entries, in value-domain-first order, keyed by
+// object.
 //
-// Health is checked before every table rather than once at startup, because the
-// server's headroom is what changes during a run. An unreadable reading halts
-// the run: not being able to see the floor is not the same as being above it.
-// A single table that fails to sample is logged and skipped — a partial set of
-// samples still describes most of a database — but a server saying it has no
-// room stops everything.
+// Health is rechecked before every table because the server's headroom changes
+// during a run, and an unreadable reading halts it: not seeing the floor is not
+// the same as being above it. One table that fails to sample is logged and
+// skipped; a server saying it has no room stops everything.
 func All(
 	ctx context.Context,
 	fetcher Fetcher,
@@ -158,12 +145,9 @@ func warn(logger Logger, message string) {
 	}
 }
 
-// Render turns a sample into the compact block the describer reads.
-//
-// Withheld columns are named rather than omitted. A describer shown four of a
-// table's nine columns, and told nothing about the other five, is being misled
-// about the table's shape — which is worse for the sentence it writes than
-// seeing fewer values would be.
+// Render turns a sample into the compact block the describer reads. Withheld
+// columns are named rather than omitted: hiding their existence misleads the
+// describer about the table's shape, which is worse than seeing fewer values.
 func Render(s catalog.Sample) string {
 	if len(s.Columns) == 0 && len(s.Withheld) == 0 {
 		return ""
@@ -182,9 +166,7 @@ func Render(s catalog.Sample) string {
 	return out.String()
 }
 
-// capCells trims every cell to CellChars. The engines cap in their own SQL, in their
-// own units; this is the describer's budget, measured in characters whatever
-// the server counted in.
+// capCells trims every cell to CellChars.
 func capCells(row []string) []string {
 	out := make([]string, len(row))
 	for i, cell := range row {

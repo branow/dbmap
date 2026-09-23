@@ -2,8 +2,7 @@
 // database into the index tree an agent reads, and the only place the whole
 // tool is assembled.
 //
-// The order is fixed, and every step of it exists because of a measurement in
-// DESIGN.md:
+// The order is fixed (see docs/DESIGN.md for the measurements behind it):
 //
 //	manifest        one cheap catalog query; the checkpoint everything resumes
 //	                from, and the source of the modify signal
@@ -16,15 +15,13 @@
 //	describe        batched model calls
 //	render          the TSV tree
 //
-// The two-tier split is the whole point. The modify signal decides whether to
-// FETCH and the content hash decides whether to DESCRIBE, so the release that
-// ALTERs 58 procedures pulls 58 bodies (seconds) and describes the three that
-// actually changed instead of paying for 58 model calls.
+// The two-tier split is the point: the modify signal decides whether to FETCH
+// and the content hash whether to DESCRIBE, so a release that ALTERs a hundred
+// procedures pulls a hundred bodies (seconds) and describes only the few whose
+// content actually moved.
 //
-// Prior state comes out of the catalogs the last build wrote. There is
-// deliberately no sidecar state file: a parallel file drifts out of step with
-// the index beside it, and the modify signal earns its place in a catalog row
-// for a human reader anyway.
+// Prior state comes out of the catalogs the last build wrote; there is
+// deliberately no sidecar state file to drift out of step with them.
 package index
 
 import (
@@ -46,17 +43,15 @@ import (
 	"github.com/branow/dbmap/llm"
 )
 
-// columnsDir mirrors the per-object directory render writes into. It is named
-// here because removing an object from the index means removing its detail file
-// too, and nothing else in the tree is addressed per object.
+// columnsDir mirrors the per-object directory render writes into, named here
+// because dropping an object means deleting its detail file too.
 const columnsDir = "columns"
 
 // Options configure one build. Every field is resolved by the caller: this
 // package reads no flag, no environment variable and no config file.
 type Options struct {
 	// Environment scopes both the index tree and the fetch cache. It is the
-	// connection name, because one connection is one deployment of a database
-	// and an index of stage must not overwrite an index of dev.
+	// connection name, so an index of one deployment cannot overwrite another.
 	Environment string
 	// Database is the database being indexed, and the only name a prompt is
 	// given for context.
@@ -67,16 +62,14 @@ type Options struct {
 	// Cache is the fetch cache root, or empty for a build that caches nothing.
 	Cache string
 	// Match narrows the build to objects whose key contains this substring,
-	// case-insensitively. A narrowed build writes a PARTIAL index: the
-	// catalogs are rewritten from what was selected, which is what makes the
-	// concept provable against forty objects before anyone waits on 1,237.
+	// case-insensitively. A narrowed build writes a PARTIAL index: the catalogs
+	// are rewritten from what was selected.
 	Match string
 	// Limit caps how many objects are processed at all. Zero means every one.
 	Limit int
-	// Samples caps how many tables are sampled: a negative value means every
-	// table being described, and zero means none at all. Sampling is the only
-	// stage that reads a row of user data, so turning it off is a first-class
-	// choice rather than an omission.
+	// Samples caps how many tables are sampled: negative means every table
+	// being described, zero none at all. Sampling is the only stage that reads
+	// a row of user data, so turning it off is a first-class choice.
 	Samples int
 	// Model overrides the backend's default model for this build.
 	Model string
@@ -89,7 +82,7 @@ type Options struct {
 	Logger Logger
 }
 
-// sampleLimit maps the sample cap onto what the sampler understands, where zero
+// sampleLimit maps the sample cap onto the sampler's convention, where zero
 // means no cap. The build skips the stage outright for Samples == 0, so the two
 // meanings of zero never meet.
 func (o Options) sampleLimit() int {
@@ -99,9 +92,8 @@ func (o Options) sampleLimit() int {
 	return o.Samples
 }
 
-// Summary is what a build did, as values. It is a struct rather than a rendered
-// string because the shell decides how a result looks and a test asserts on
-// numbers, not on wording.
+// Summary is what a build did, as values rather than rendered text: the shell
+// decides how a result looks, and a test asserts on numbers.
 type Summary struct {
 	Environment string
 	Database    string
@@ -111,45 +103,36 @@ type Summary struct {
 
 	// Objects is how many objects the build covered after Match and Limit.
 	Objects int
-	// Fetched is how many of them were read from the database this run, and
-	// Reused how many the fetch cache could prove current. In a dry run they
-	// are what the plan would have done, since nothing is fetched.
+	// Fetched is how many were read from the database this run, Reused how many
+	// the cache proved current. A dry run reports what the plan would have done.
 	Fetched int
 	Reused  int
-	// Described is how many objects a model wrote a sentence for, and
-	// Unchanged how many kept the sentence the previous build wrote because
-	// their content hash had not moved. Unchanged is the tier that pays for
-	// itself. A kind that is never described — a synonym, indexed for its
-	// target rather than for a sentence — counts in neither.
+	// Described is how many objects a model wrote a sentence for, Unchanged how
+	// many kept the previous build's sentence because their hash had not moved.
+	// A kind that is never described counts in neither.
 	Described int
 	Unchanged int
 	Sampled   int
 	// Dropped are objects the previous build indexed that the database no
 	// longer has. Their rows and detail files are removed.
 	Dropped []string
-	// Missing are objects the model skipped. They are reported rather than
-	// left silently blank in the index.
+	// Missing are objects the model skipped, reported rather than left blank.
 	Missing []string
-	// Reasons counts why objects were refetched, so a build can say what it is
-	// doing and why.
+	// Reasons counts why objects were refetched.
 	Reasons map[plan.Reason]int
 	// Redactions tallies the secrets stripped out of module bodies, per class.
-	// It is surfaced rather than swallowed: a real credential in a procedure
-	// body is something the operator has to know about.
+	// Surfaced rather than swallowed: the operator has to know.
 	Redactions redact.Counts
 	Usage      llm.Usage
-	// Failed are describe batches that errored. A failed batch is skipped, not
-	// fatal, because a partial index beats none.
+	// Failed are describe batches that errored; skipped, not fatal.
 	Failed      []error
 	Catalogs    []render.Written
 	ColumnFiles int
 }
 
-// Build runs the whole pipeline once and reports what it did.
-//
-// client may be nil, which describes nothing — the shape a structure-only build
-// takes. src is released before the describe stage in every path, including
-// every error path.
+// Build runs the whole pipeline once and reports what it did. A nil client
+// describes nothing, which is the structure-only shape. src is released before
+// the describe stage on every path, error paths included.
 func Build(ctx context.Context, src Source, client llm.Client, opts Options) (Summary, error) {
 	dir := filepath.Join(opts.Out, opts.Environment, opts.Database)
 	summary := Summary{
@@ -259,9 +242,8 @@ func manifest(ctx context.Context, src Source, cached store,
 	return objects, nil
 }
 
-// prior reads what the last build recorded, straight out of the catalogs it
-// wrote. A forced build reads nothing, which is how --force rebuilds
-// everything: with no prior state every object is new to both tiers.
+// prior reads what the last build recorded, out of the catalogs it wrote. A
+// forced build reads nothing, so every object is new to both staleness tiers.
 func prior(dir string, force bool) (map[string]catalog.State, error) {
 	if force {
 		return map[string]catalog.State{}, nil
@@ -288,9 +270,8 @@ func narrow(objects []catalog.Object, match string, limit int) []catalog.Object 
 	return kept
 }
 
-// reasons counts, over the selected objects only, why each is being refetched.
-// The planner decides over the whole manifest; a narrowed build reports on what
-// it is actually going to do.
+// reasons counts why each SELECTED object is refetched. The planner decides
+// over the whole manifest; a narrowed build reports only on its own work.
 func reasons(selected []catalog.Object, all map[string]plan.Reason) map[plan.Reason]int {
 	counted := map[plan.Reason]int{}
 	for _, object := range selected {
@@ -310,15 +291,10 @@ func total(counted map[plan.Reason]int) int {
 	return sum
 }
 
-// fetch assembles one entry per selected object: the manifest fact plus the
-// structure and, for a module kind, the body.
-//
-// The cache is asked first and the database only for what it cannot prove
-// current. A cached entry is keyed by the modify signal, so an object the
-// planner called stale is a miss by construction — and an object the planner
-// called current but the cache has never seen is refetched too, because a cold
-// cache is a reason to read cheaply, never a reason to index an object
-// incompletely.
+// fetch assembles one entry per selected object: the manifest fact, the
+// structure, and for a module kind the body. The cache answers first and the
+// database only for what it cannot prove current; a cold cache refetches rather
+// than indexing an object incompletely.
 func fetch(
 	ctx context.Context,
 	src Source,
@@ -378,9 +354,8 @@ func fetch(
 	return entries, nil
 }
 
-// pull reads what the cache could not serve: one bounded structure fetch for
-// the database, then the bodies of the module kinds among the misses. Both
-// stages are health-checked before they send anything.
+// pull reads what the cache could not serve: one bounded structure fetch, then
+// the module bodies among the misses. Both are health-checked before sending.
 func pull(
 	ctx context.Context,
 	src Source,
@@ -433,16 +408,15 @@ func pull(
 	return nil
 }
 
-// module reports whether this object's kind carries a body, read off the kind
-// table rather than decided here.
+// module reports whether this object's kind carries a body, off the kind table.
 func module(object catalog.Object) bool {
 	spec, ok := catalog.Lookup(object.Kind)
 	return ok && spec.Module
 }
 
-// samples reads the first rows of the tables about to be described. Only those
-// tables: a sample is describer input and nothing else, so sampling a table
-// whose description is already current would read user data for nothing.
+// samples reads the first rows of the tables about to be described, and only
+// those: a sample is describer input, so sampling a table whose description is
+// already current would read user data for nothing.
 func samples(
 	ctx context.Context,
 	src Source,
@@ -458,8 +432,7 @@ func samples(
 	})
 }
 
-// describeAll sends the batches. A build with no client describes nothing,
-// which is the structure-only shape; it is not an error.
+// describeAll sends the batches. A build with no client describes nothing.
 func describeAll(
 	ctx context.Context,
 	client llm.Client,
@@ -487,10 +460,9 @@ func describeAll(
 	})
 }
 
-// write renders the tree. Entries come back in manifest order so two builds
-// over the same database produce the same files, and an object the model
-// skipped keeps whatever sentence the previous build gave it rather than
-// losing one it already had.
+// write renders the tree in manifest order, so two builds over one database
+// produce the same files. An object the model skipped keeps the sentence the
+// previous build gave it.
 func write(
 	dir string,
 	selected []catalog.Object,
@@ -520,9 +492,8 @@ func write(
 	return render.Write(dir, entries)
 }
 
-// remove takes objects the database no longer has out of the index. Their
-// catalog rows go simply by being rewritten without them; their detail files
-// have to be deleted, or the tree would keep describing a table that is gone.
+// remove deletes the detail files of dropped objects. Their catalog rows go by
+// being rewritten without them; the detail files must be deleted explicitly.
 func remove(dir string, dropped []string) error {
 	for _, key := range dropped {
 		err := os.Remove(filepath.Join(dir, columnsDir, key+".tsv"))

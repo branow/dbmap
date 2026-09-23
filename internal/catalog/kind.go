@@ -1,16 +1,15 @@
 // Package catalog is the engine-agnostic vocabulary every other domain package
 // speaks: what an indexed object is, what was fetched about it, and what the
 // previous build recorded. It imports nothing and knows no SQL — an engine maps
-// its own catalog type codes onto these types at the boundary, and nothing
-// above that boundary ever sees a type code.
+// its own catalog type codes onto these types at the boundary.
 package catalog
 
 // Kind is what an indexed object is.
 type Kind string
 
-// The kinds the index covers. Triggers are deliberately absent: one database
-// holds 258 of them at close to one per table, generated changelog writers, so
-// the parent table records a trigger count instead of describing each one.
+// The kinds the index covers. Triggers are deliberately absent: they run close
+// to one per table and are usually generated, so the parent table records a
+// trigger count instead of describing each one.
 const (
 	Table     Kind = "table"
 	View      Kind = "view"

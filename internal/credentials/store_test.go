@@ -98,10 +98,9 @@ func TestKeychainErrors(t *testing.T) {
 	})
 }
 
-// TestKeychainAsksOnlyWhenSomeoneIsWatching is the hang this fix exists to
-// prevent: a store that was not told a human is present must refuse the
-// keychain's authorization dialog on every operation, because a dialog nobody
-// can see blocks the process forever.
+// TestKeychainAsksOnlyWhenSomeoneIsWatching is the hang this prevents: a store
+// not told a human is present must refuse the keychain's dialog on every
+// operation, because a dialog nobody can see blocks forever.
 func TestKeychainAsksOnlyWhenSomeoneIsWatching(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -138,9 +137,8 @@ func TestKeychainAsksOnlyWhenSomeoneIsWatching(t *testing.T) {
 	}
 }
 
-// TestBlockedKeychainNamesBothWaysOut pins the message a user actually sees
-// after a rebuild: a generic "keychain unavailable" leaves them with nothing to
-// do, so the remedy has to name the two paths that work.
+// TestBlockedKeychainNamesBothWaysOut pins the message a user sees after a
+// rebuild: "keychain unavailable" alone leaves them nothing to do.
 func TestBlockedKeychainNamesBothWaysOut(t *testing.T) {
 	key := DBKey("primary")
 	_, err := stub(nil, errBlocked).Get(key)
@@ -226,8 +224,7 @@ func TestFakeStore(t *testing.T) {
 }
 
 // TestNewKeychainUsesThePlatformBackend catches a build where no platform file
-// supplied the three operations, which would otherwise only show up as a nil
-// call at runtime on a user's machine.
+// supplied the three operations, which would otherwise be a nil call at runtime.
 func TestNewKeychainUsesThePlatformBackend(t *testing.T) {
 	keychain := NewKeychain("")
 	if keychain.Service != Service {

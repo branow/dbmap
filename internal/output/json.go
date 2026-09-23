@@ -6,8 +6,8 @@ import (
 	"sort"
 )
 
-// jsonw renders for a program: one JSON document per call, indented so a human
-// can still read a piped result.
+// jsonw renders for a program: one JSON document per call, indented so a piped
+// result is still readable.
 type jsonw struct{ out io.Writer }
 
 func (j *jsonw) List(recs []Record) error {
@@ -21,8 +21,7 @@ func (j *jsonw) Show(rec Record) error { return j.encode(rec) }
 
 func (j *jsonw) Value(v any) error { return j.encode(v) }
 
-// Note drops the line: a status message is not part of the document a program
-// parses.
+// Note drops the line: it is not part of the document a program parses.
 func (j *jsonw) Note(string) error { return nil }
 
 func (j *jsonw) encode(v any) error {

@@ -90,9 +90,8 @@ func read(path string) (string, error) {
 	return string(raw), err
 }
 
-// A fixture never holds a credential-shaped literal: the repository forbids one
-// and its own scanner refuses to read a file containing one. These are built
-// instead, and are only ever compared with themselves.
+// A fixture never holds a credential-shaped literal - the repository forbids
+// one - so these are built and only ever compared with themselves.
 var (
 	password = stand("password")
 	apiKey   = stand("api-key")

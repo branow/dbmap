@@ -5,16 +5,15 @@ type Withholding string
 
 const (
 	// WithheldPII marks a column whose name says it holds a person's data.
-	// Matched on the name, because a type says nothing about who a value
-	// belongs to.
+	// Matched on the name: a type says nothing about who a value belongs to.
 	WithheldPII Withholding = "pii"
 	// WithheldUnsampleable marks a blob, spatial or (max) column: unbounded by
 	// definition, and worth nothing to a describer.
 	WithheldUnsampleable Withholding = "unsampleable"
 )
 
-// Withheld is a column the sample did not read, and why. It is recorded rather
-// than dropped silently, so the describer knows the column exists without ever
+// Withheld is a column the sample did not read, and why. Recorded rather than
+// dropped silently, so the describer knows the column exists without ever
 // seeing a value from it.
 type Withheld struct {
 	Column string
@@ -29,9 +28,7 @@ type Sample struct {
 	Columns  []string
 	Withheld []Withheld
 	Rows     [][]string
-	// Complete marks a table small enough that the sample is the whole table.
-	// That is how a lookup table's value domain is captured with no DISTINCT
-	// scan anywhere — 45 such tables in one measured database, every one under
-	// 25 rows.
+	// Complete marks a table small enough that the sample is the whole table:
+	// how a lookup table's value domain is captured with no DISTINCT scan.
 	Complete bool
 }

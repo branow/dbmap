@@ -9,23 +9,18 @@ import (
 )
 
 // manifestColumns is how wide a manifest row is. A shorter row is dropped
-// rather than padded, so a truncated result can never become an object with
-// invented facts.
+// rather than padded, so a truncated result cannot invent facts.
 const manifestColumns = 7
 
 // manifestQuery lists every in-scope object with the cheap facts the planner
 // versions against.
 //
-// Rows and size come from sys.dm_db_partition_stats: it reads page totals the
-// engine already maintains, so the query costs the same against a 616M-row
-// table as against an 11-row lookup. The index_id < 2 filter counts heap or
-// clustered rows only, so a table with four non-clustered indexes is not
-// counted five times.
-//
-// modify_date is converted to ISO 8601 in SQL rather than in Go, because that
-// is the exact string the previous build wrote into the index and the exact
-// string it is compared against. Rendering it twice, in two languages, is two
-// places for a format to drift.
+// Rows and size come from sys.dm_db_partition_stats, which reads maintained
+// page totals and so costs the same at any table size; index_id < 2 counts heap
+// or clustered rows only, so an indexed table is not counted once per index.
+// modify_date is rendered as ISO 8601 in SQL rather than in Go because it is
+// compared against the string the previous build wrote, and formatting it in
+// two languages is two places to drift.
 func manifestQuery() string {
 	return `SELECT s.name, o.name, o.type,
   CONVERT(varchar(19), o.modify_date, 126),
@@ -82,9 +77,8 @@ func (e *Engine) Manifest(ctx context.Context, conn engine.Conn) ([]catalog.Obje
 	return parseManifest(rows), nil
 }
 
-// number reads a catalog count, treating anything unparseable as zero: a
-// missing page total means the object has no storage, not that the build
-// should fail.
+// number reads a catalog count. Unparseable is zero: a missing page total means
+// no storage, not a failed build.
 func number(cell string) int64 {
 	n, err := strconv.ParseInt(cell, 10, 64)
 	if err != nil {

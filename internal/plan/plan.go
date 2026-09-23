@@ -1,13 +1,10 @@
 // Package plan turns a fresh manifest plus the previously written index into
-// the two work sets a build runs.
-//
-//	Fetch     what to pull from the database, by modify signal
-//	Describe  what to send to the model, by content fingerprint
-//
-// Both are pure. The fetch stage runs between them, and the split is what makes
-// a rebuild after a release cost a few dozen describe calls instead of 1,237:
-// the release moves the modify signal on everything it touched, and the
-// fingerprint then discards the ones whose content is unchanged.
+// the two work sets a build runs: Fetch, decided by modify signal, and
+// Describe, decided by content fingerprint. Both are pure; the fetch stage runs
+// between them. The split is what makes a rebuild after a release cost a few
+// dozen describe calls rather than one per object — the release moves the
+// modify signal on everything it touched, and the fingerprint then discards the
+// ones whose content is unchanged.
 //
 // An object missing from the prior state is new and is always both fetched and
 // described. An object in the state but absent from the manifest was dropped
@@ -45,14 +42,10 @@ type Rule struct {
 	When func(object catalog.Object, prior *catalog.State) bool
 }
 
-// FetchReasons is the fetch decision as data, in the order it is asked. The
-// first rule that applies and fires wins and names the reason.
-//
-// The sample rule applies to TABLES ONLY. A table is described partly from its
-// rows, so growth can make its description stale on its own; a procedure is
-// described from its body, which the modify signal already covers. Scoping the
-// rule says that, where letting it run on every kind only worked by accident —
-// procedures report zero rows, so it never fired.
+// FetchReasons is the fetch decision as data, in the order it is asked; the
+// first rule that applies and fires names the reason. The sample rule is scoped
+// to tables because only a table is described partly from its rows — on other
+// kinds it would be a no-op that merely looks intentional.
 var FetchReasons = []Rule{
 	{
 		Reason: New,
@@ -143,10 +136,10 @@ type DescribePlan struct {
 	Unchanged []catalog.Entry
 }
 
-// Describe splits freshly fetched entries by content fingerprint. Every entry
-// comes back carrying the fingerprint just computed for it, so the writer never
-// recomputes one. An entry is redescribed when its hash moved or when the prior
-// state has a matching hash but no description to reuse.
+// Describe splits freshly fetched entries by content fingerprint, each returned
+// carrying the hash just computed so the writer never recomputes one. An entry
+// is redescribed when its hash moved, or when the hash matches but the prior
+// state holds no description to reuse.
 func Describe(fetched []catalog.Entry, state map[string]catalog.State) (DescribePlan, error) {
 	var plan DescribePlan
 

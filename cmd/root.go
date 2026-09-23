@@ -1,6 +1,6 @@
-// Package cmd is the cobra tree. It parses flags, calls into internal packages
-// and renders the result: no business logic lives here, and no command exits
-// the process - every one of them returns an error that main translates.
+// Package cmd is the cobra tree: it parses flags, calls internal packages and
+// renders the result. No business logic, and no command exits the process -
+// each returns an error that main translates.
 package cmd
 
 import (
@@ -17,9 +17,9 @@ type Build struct {
 	Date    string
 }
 
-// NewRoot assembles the command tree. The persistent flags are resolved once,
+// NewRoot assembles the command tree. Persistent flags are resolved once,
 // before any command body runs, so a command reads settled values from the
-// factory instead of consulting flags, environment and file for itself.
+// factory rather than consulting flags, environment and file for itself.
 func NewRoot(f *cmdutil.Factory, build Build) *cobra.Command {
 	var (
 		profile   string

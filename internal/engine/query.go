@@ -7,29 +7,21 @@ import (
 	"strings"
 )
 
-// MaxDefinition caps one module body on the way out of the database. The whole
-// measured module corpus of the largest database is 3.7 MB, so there is nothing
-// to save by trimming hard; 50,000 characters keeps 99% of bodies byte-complete
-// while a single pathological one cannot decide the size of a batch. The prompt
-// cap, applied much later, is lower on purpose so the stored copy stays fuller.
+// MaxDefinition caps one module body on the way out of the database, so that a
+// single pathological body cannot decide the size of a batch. The prompt cap,
+// applied much later, is lower on purpose so the stored copy stays fuller.
 const MaxDefinition = 50000
 
-// ModuleBatch is how many objects one body fetch asks for. Bodies average 6.5 KB
-// and peak at 88 KB, so a batch is a few hundred KB and a pathological one still
-// cannot reach a size worth streaming.
+// ModuleBatch is how many objects one body fetch asks for. See DESIGN.md.
 const ModuleBatch = 40
 
 // Query is the one path from an engine to a database, and the only place the
-// safety contract is applied. The order is load-bearing:
+// safety contract is applied. The order is load-bearing: prove the statement is
+// a read and refuse before a connection is used, then apply the engine's
+// resource guard, then run it inside the session the guard asked for.
 //
-//  1. prove the statement is a read — and refuse before a connection is used,
-//     so an unclassifiable query never reaches a server at all
-//  2. apply the engine's resource guard, so no statement can be sent without it
-//  3. run it, inside whatever session the guard asked for
-//
-// Rows come back as strings because that is what every consumer of this package
-// does with them: the parse step is a pure function over cells, testable with no
-// database behind it. A NULL reads as the empty string.
+// Rows come back as strings so that parsing is a pure function over cells,
+// testable with no database behind it. A NULL reads as the empty string.
 func Query(
 	ctx context.Context,
 	conn Conn,
@@ -94,7 +86,7 @@ func Batch(keys []string, size int) [][]string {
 }
 
 // Placeholders renders n ordinal placeholders in an engine's own dialect, so a
-// key list rides as parameters rather than as interpolated text.
+// key list rides as parameters rather than interpolated text.
 func Placeholders(prefix string, n int) string {
 	var out strings.Builder
 	for i := 1; i <= n; i++ {

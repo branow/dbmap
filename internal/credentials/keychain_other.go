@@ -9,14 +9,11 @@ import (
 )
 
 // Every platform but macOS reaches its credential store through go-keyring:
-// wincred on Windows, secret-service on Linux. macOS uses it too when cgo is
-// off, which is the only build where dbmap cannot call the Security framework
-// in its own process.
+// wincred on Windows, secret-service on Linux, and macOS too when cgo is off.
 //
-// The allow decision is recorded by the store above and cannot be honoured
-// here, because go-keyring exposes no way to refuse a dialog. These backends do
-// not tie an item to the calling binary's code identity, so they do not raise
-// the dialog that motivated the flag.
+// The allow decision cannot be honoured here - go-keyring exposes no way to
+// refuse a dialog - but these backends do not tie an item to the calling
+// binary's code identity, so they never raise the dialog that motivated it.
 func itemGet(service, account string, _ ui) (string, error) {
 	value, err := keyring.Get(service, account)
 	if errors.Is(err, keyring.ErrNotFound) {

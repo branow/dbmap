@@ -55,10 +55,9 @@ func input(kind catalog.Kind, name string) Input {
 	return Input{Entry: entry(kind, name, catalog.Column{Name: "ID", Type: "int"}), Database: "AppCore"}
 }
 
-// The most expensive lesson in this tool. A field named `description` whose
-// schema text reads like a noun phrase gets filled with a description OF THE
-// FIELD, and a better-instruction-following model does it more reliably. This
-// test is what stops the wording drifting back.
+// A field named `description` whose schema text reads like a noun phrase gets
+// filled with a description OF THE FIELD. This test stops the wording drifting
+// back.
 func TestTheOutputFieldIsSentenceAndItsTextIsAnOrder(t *testing.T) {
 	var schema map[string]any
 	if err := json.Unmarshal(Schema, &schema); err != nil {

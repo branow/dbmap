@@ -6,18 +6,15 @@ import (
 	"github.com/branow/dbmap/internal/catalog"
 )
 
-// Type is a sys.objects type code. It stays inside this package: nothing above
-// the engine boundary ever sees one.
+// Type is a sys.objects type code. Nothing above the engine boundary sees one.
 type Type string
 
-// Types is the type code table — the one place a SQL Server code becomes a
-// catalog kind. It is data rather than a switch, so covering a new code is a
-// new row and nothing else changes.
+// Types is the one place a SQL Server type code becomes a catalog kind, as data
+// rather than a switch so a new code is a new row.
 //
-// Triggers are deliberately absent. One measured database holds 258 of them at
-// close to one per table, generated changelog writers carrying nothing a reader
-// of the tracked table lacks, so the index records a trigger COUNT on the
-// parent and describes none of them.
+// Triggers are deliberately absent: in practice they are generated changelog
+// writers carrying nothing a reader of the tracked table lacks, so the index
+// records a trigger count on the parent and describes none of them.
 var Types = []struct {
 	Type Type
 	Kind catalog.Kind
@@ -33,12 +30,10 @@ var Types = []struct {
 	{"SN", catalog.Synonym},  // synonym
 }
 
-// ExcludedSchemas are dropped before anything is fetched. `cdc` holds 534
-// auto-generated Change Data Capture functions across the three measured
-// databases — two per tracked table, named after it and carrying nothing a
-// reader of that table lacks. Exactly one handwritten inline table-valued
-// function exists across the whole estate, so excluding the schema costs
-// almost nothing and removes 40% of the describe workload.
+// ExcludedSchemas are dropped before anything is fetched. `cdc` is almost
+// entirely auto-generated Change Data Capture functions, two per tracked table
+// and carrying nothing a reader of that table lacks, so excluding it removes a
+// large share of the describe workload at almost no cost.
 var ExcludedSchemas = []string{"cdc"}
 
 var kinds = func() map[Type]catalog.Kind {
@@ -50,15 +45,14 @@ var kinds = func() map[Type]catalog.Kind {
 }()
 
 // kindOf maps a type code onto a catalog kind. An unrecognised code is reported
-// rather than guessed at, so a type SQL Server starts returning cannot slip into
-// the index unclassified.
+// rather than guessed at, so it cannot slip into the index unclassified.
 func kindOf(code string) (catalog.Kind, bool) {
 	kind, ok := kinds[Type(strings.TrimSpace(code))]
 	return kind, ok
 }
 
-// typeList renders the type codes for an IN predicate. The values are this
-// package's own constants, never user input.
+// typeList renders the type codes for an IN predicate, from this package's own
+// constants rather than user input.
 func typeList() string {
 	quoted := make([]string, len(Types))
 	for i, row := range Types {

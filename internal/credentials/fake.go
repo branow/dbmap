@@ -1,13 +1,12 @@
 package credentials
 
-// Fake is an in-memory Store. It ships in the package rather than in a test
-// file so every command's tests can run without a keychain, a file or an
-// environment variable.
+// Fake is an in-memory Store. It ships in the package, not in a test file, so
+// every command's tests can run with no keychain and no environment variable.
 type Fake struct {
 	// Values holds the stored secrets by key, for assertions.
 	Values map[string]string
-	// Err, when set, is returned by every operation, which is how a test
-	// drives the failure branches.
+	// Err, when set, is returned by every operation, so a test can drive the
+	// failure branches.
 	Err error
 }
 

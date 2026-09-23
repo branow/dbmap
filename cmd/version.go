@@ -9,8 +9,7 @@ import (
 	"github.com/branow/dbmap/internal/output"
 )
 
-// newVersion reports what binary is running. It goes through the output writer
-// like every other result, so `dbmap version -o json` is machine-readable.
+// newVersion reports what binary is running.
 func newVersion(f *cmdutil.Factory, build Build) *cobra.Command {
 	return &cobra.Command{
 		Use:   "version",
