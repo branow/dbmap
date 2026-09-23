@@ -21,20 +21,24 @@ const CellChars = 200
 // Unbounded is the width a catalog renders for a column with no declared one.
 const Unbounded = "(max)"
 
-// Unsampleable is the type table: blobs, documents, spatial values and row
-// versions, which are unbounded or opaque by definition and tell a describer
-// nothing. Names are lower-cased engine type names and cover both engines'
+// Unsampleable is the type table: values that are opaque or meaningless to a
+// describer. Names are lower-cased engine type names and cover both engines'
 // spellings of one concept — SQL Server's `image` and Postgres's `bytea` are
 // the same decision.
 //
+// It lists only what a describer cannot read: binary payloads, spatial values
+// and row versions. It deliberately does NOT list the long string types.
+// Unboundedness is already handled — every cell is capped at CellChars on the
+// way out — so excluding them buys nothing and costs the thing this tool exists
+// for. A measured run made that concrete: `text` was on this list, so sampling
+// a three-row status lookup projected its integer key and nothing else, and the
+// describer never saw Incomplete, Pending or CC Declined. Those values ARE the
+// value domain; capturing them without a DISTINCT scan is the whole argument
+// for sampling small tables first.
+//
 // It is a table rather than a chain of comparisons so a new type is a new row.
 var Unsampleable = []string{
-	"text",
-	"ntext",
 	"image",
-	"xml",
-	"json",
-	"jsonb",
 	"varbinary",
 	"binary",
 	"bytea",

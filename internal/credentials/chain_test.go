@@ -84,6 +84,34 @@ func TestKeychainAnswersWhenTheEnvironmentIsSilent(t *testing.T) {
 	}
 }
 
+// TestDefaultOptionsNeverPrompt guards the zero value: whatever else Options
+// grows, a store built without an explicit Interactive must refuse the
+// keychain's dialog. It fails the day someone makes prompting the default.
+func TestDefaultOptionsNeverPrompt(t *testing.T) {
+	tests := []struct {
+		name    string
+		options Options
+		want    ui
+	}{
+		{name: "zero value", options: Options{}, want: noUI},
+		{name: "never", options: Options{Policy: PolicyNever}, want: noUI},
+		{name: "plaintext", options: Options{Policy: PolicyPlaintext, File: "x.yml"},
+			want: noUI},
+		{name: "opted in", options: Options{Interactive: true}, want: allowUI},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store, err := New(tt.options)
+			if err != nil {
+				t.Fatalf("New: %v", err)
+			}
+			if got := store.(*chain).keychain.ui; got != tt.want {
+				t.Errorf("keychain ui = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestNew(t *testing.T) {
 	tests := []struct {
 		name    string

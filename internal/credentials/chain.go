@@ -26,6 +26,12 @@ type Options struct {
 	File string
 	// Env reads the environment; nil means the process environment.
 	Env func(string) string
+	// Interactive says a human is watching a terminal and may answer the
+	// keychain's authorization dialog, which is true only when both streams are
+	// a terminal and --no-input was not given. The zero value is false, so a
+	// store nobody configured fails fast instead of blocking on a dialog that
+	// a script, a CI job or a background process would never show anyone.
+	Interactive bool
 }
 
 // chain is the assembled stack: the environment answers first so a headless run
@@ -39,16 +45,17 @@ type chain struct {
 
 // New assembles the store for a policy.
 func New(o Options) (Store, error) {
+	keychain := newKeychain(o.Service, ui(o.Interactive))
 	switch o.Policy {
 	case "", PolicyNever:
-		return &chain{env: NewEnv(o.Env), keychain: NewKeychain(o.Service)}, nil
+		return &chain{env: NewEnv(o.Env), keychain: keychain}, nil
 	case PolicyPlaintext:
 		if o.File == "" {
 			return nil, fmt.Errorf("policy %q needs a file path", o.Policy)
 		}
 		return &chain{
 			env:      NewEnv(o.Env),
-			keychain: NewKeychain(o.Service),
+			keychain: keychain,
 			file:     NewFile(o.File),
 		}, nil
 	default:
