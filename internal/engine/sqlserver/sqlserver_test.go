@@ -44,8 +44,8 @@ func everyQuery() map[string]string {
 func TestEveryGeneratedQueryIsReadOnly(t *testing.T) {
 	for name, query := range everyQuery() {
 		t.Run(name, func(t *testing.T) {
-			if err := engine.AssertReadOnly(query); err != nil {
-				t.Fatalf("the engine builds a query the gate refuses: %v\n%s", err, query)
+			if err := enginetest.ReadOnly(query); err != nil {
+				t.Fatalf("the engine builds a query that is not a read: %v\n%s", err, query)
 			}
 		})
 	}

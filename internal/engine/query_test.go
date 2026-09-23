@@ -3,7 +3,6 @@ package engine
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -112,22 +111,6 @@ func TestQueryCarriesTheSessionGuard(t *testing.T) {
 	// A session-only guard must not silently mangle the statement.
 	if conn.statements[0] != "SELECT 1" {
 		t.Fatalf("statement = %q, want it unchanged", conn.statements[0])
-	}
-}
-
-// The gate runs before the connection is touched. A refused statement must not
-// reach a server to be judged there.
-func TestQueryRefusesBeforeUsingTheConnection(t *testing.T) {
-	conn := &spy{}
-
-	_, err := Query(context.Background(), conn, sqlserverish, "DROP TABLE dbo.Orders")
-
-	var refused *RefusedError
-	if !errors.As(err, &refused) {
-		t.Fatalf("error is %T, want *RefusedError", err)
-	}
-	if len(conn.statements) != 0 {
-		t.Fatalf("a refused statement reached the connection: %q", conn.statements)
 	}
 }
 

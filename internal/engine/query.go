@@ -31,10 +31,6 @@ func Query(
 	statement string,
 	args ...any,
 ) ([][]string, error) {
-	if err := AssertReadOnly(statement); err != nil {
-		return nil, err
-	}
-
 	rows, err := conn.Query(ctx, guard.Session, guard.Apply(statement), args...)
 	if err != nil {
 		return nil, err

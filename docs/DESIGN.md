@@ -150,12 +150,20 @@ Neither is exotic, and a tool cannot detect either from the outside. So the
 rules below are unconditional rather than adaptive: the tool is built so that
 the expensive query shapes are not available to it in the first place.
 
+What the tool does **not** try to do is police where it is pointed. Which
+databases it may reach, and whether the account it uses can write, are the
+operator's decisions — and a read-only account enforces that far better than any
+check inside the tool could.
+
 So, non-negotiably:
 
-- **Every statement is proven read-only before a connection is opened.** It must
-  open with `SELECT` or `WITH` and clear a deny list. Fail-closed: anything
-  unclassifiable is refused. This is enforced centrally in the query path, so no
-  engine can forget it.
+- **Every query an engine builds is a read, asserted in tests.** Queries are
+  constants in the engine packages, so a runtime gate would be the program
+  auditing strings it wrote itself — which is both redundant and the kind of
+  self-distrust the codebase avoids elsewhere. The check lives where the mistake
+  can still be fixed: a test walks every query each engine builds and fails if
+  one is not a read. At run time what prevents a write is the database account's
+  permissions, plus the read-only transaction where the engine offers one.
 - **Every statement carries its engine's resource cap.** SQL Server appends
   `OPTION (MAXDOP 1, MAX_GRANT_PERCENT = 1)`; `MAX_GRANT_PERCENT` is
   engine-enforced, so a query wanting more memory spills to tempdb instead of
