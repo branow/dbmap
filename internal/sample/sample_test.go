@@ -271,9 +271,11 @@ func TestSamplingHaltsWhenTheServerHasNoRoom(t *testing.T) {
 }
 
 // Not being able to see the floor is not the same as being above it.
+// An unreadable reading is unknown, and unknown halts. The engine reports this
+// as a verdict rather than an error, because the server did answer.
 func TestSamplingHaltsWhenHealthIsUnreadable(t *testing.T) {
 	entries := []catalog.Entry{table("Orders", 10, col("ID", "int"))}
-	f := &fetcher{healthE: errors.New("permission denied on the health views")}
+	f := &fetcher{health: engine.Classify(nil)}
 
 	_, err := All(context.Background(), f, nil, entries, Options{})
 
@@ -286,6 +288,25 @@ func TestSamplingHaltsWhenHealthIsUnreadable(t *testing.T) {
 	}
 	if len(f.asked) != 0 {
 		t.Fatal("sampled a table while health was unknown")
+	}
+}
+
+// A health probe that errors means the connection itself failed mid-run — the
+// server was never reached. That error is the only useful thing to report, and
+// dressing it as "health could not be read" once hid every wrong password
+// behind a memory warning.
+func TestSamplingSurfacesAConnectionFailureAsItself(t *testing.T) {
+	entries := []catalog.Entry{table("Orders", 10, col("ID", "int"))}
+	lost := errors.New("dial tcp 127.0.0.1:5432: connect: connection refused")
+	f := &fetcher{healthE: lost}
+
+	_, err := All(context.Background(), f, nil, entries, Options{})
+
+	if !errors.Is(err, lost) {
+		t.Fatalf("error is %v, want the connection failure itself", err)
+	}
+	if len(f.asked) != 0 {
+		t.Fatal("sampled a table after the connection failed")
 	}
 }
 

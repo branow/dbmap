@@ -133,7 +133,7 @@ func Open(name string, cfg config.Connection, secret string) (*Pool, error) {
 func (p *Pool) Name() string { return p.name }
 
 // Conn is the handle an engine reads through.
-func (p *Pool) Conn() engine.Conn { return conn{db: p.db} }
+func (p *Pool) Conn() engine.Conn { return conn{db: p.db, host: p.host} }
 
 // Engine is the reader for this pool's engine.
 func (p *Pool) Engine() (engine.Engine, error) { return Engine(p.engine) }

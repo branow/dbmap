@@ -98,6 +98,9 @@ func runIndex(ctx context.Context, f *cmdutil.Factory, connection string,
 	if err != nil {
 		return err
 	}
+	// The resolved name is what gets opened, not just what the tree is called.
+	// entry is a copy, so the stored connection is untouched.
+	entry.Database = database
 
 	secret, err := dbSecret(f, connection, entry)
 	if err != nil {
@@ -165,6 +168,9 @@ func resolveConnection(f *cmdutil.Factory, named string) (string, config.Connect
 
 // resolveDatabase settles which database is indexed. The name becomes a
 // directory in the index tree, so it must be a single path segment.
+// resolveDatabase picks the database to open: --db when given, else the
+// connection's own. The name is also the tree's directory, so it must be a
+// plain name rather than a path.
 func resolveDatabase(entry config.Connection, override string) (string, error) {
 	database := override
 	if database == "" {

@@ -8,8 +8,14 @@ import (
 )
 
 // conn adapts a pooled *sql.DB to engine.Conn.
+//
+// It is also the one place a driver failure is named. Drivers dial lazily, so
+// the first query of a run is where a wrong password or an unreachable host
+// actually surfaces; diagnosing here means every stage above gets a classified
+// error instead of raw driver prose.
 type conn struct {
-	db *sql.DB
+	db   *sql.DB
+	host string
 }
 
 // Query runs one statement in the session the guard asked for. A session guard
@@ -22,24 +28,25 @@ func (c conn) Query(
 	args ...any,
 ) (engine.Rows, error) {
 	if !session.ReadOnly && len(session.Set) == 0 {
-		return c.db.QueryContext(ctx, statement, args...)
+		rows, err := c.db.QueryContext(ctx, statement, args...)
+		return rows, diagnose(err, c.host)
 	}
 
 	tx, err := c.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: session.ReadOnly})
 	if err != nil {
-		return nil, err
+		return nil, diagnose(err, c.host)
 	}
 	for _, setting := range session.Set {
 		if _, err := tx.ExecContext(ctx, setting); err != nil {
 			_ = tx.Rollback()
-			return nil, err
+			return nil, diagnose(err, c.host)
 		}
 	}
 
 	rows, err := tx.QueryContext(ctx, statement, args...)
 	if err != nil {
 		_ = tx.Rollback()
-		return nil, err
+		return nil, diagnose(err, c.host)
 	}
 	return &scoped{Rows: rows, tx: tx}, nil
 }
