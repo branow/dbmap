@@ -51,7 +51,12 @@ func verifyConnection(ctx context.Context, name string, entry config.Connection,
 // openStore assembles the secret store the resolved policy selects. The default
 // policy refuses a plaintext file outright, which is why the environment path
 // exists: it is what lets a headless run work with no keychain at all.
-func openStore(c *config.Config, o config.Overrides) (credentials.Store, error) {
+//
+// interactive decides whether the keychain may raise a dialog. It must be true
+// only when a person is actually watching a terminal: the macOS keychain binds
+// an item to the storing binary's code identity, so a rebuilt binary is asked to
+// re-authorize, and a dialog nobody can see blocks the process forever.
+func openStore(c *config.Config, o config.Overrides, interactive bool) (credentials.Store, error) {
 	fallback, err := c.Fallback(o)
 	if err != nil {
 		return nil, err
@@ -61,8 +66,9 @@ func openStore(c *config.Config, o config.Overrides) (credentials.Store, error) 
 		file = credentials.FilePath(c.Path())
 	}
 	return credentials.New(credentials.Options{
-		Policy:  credentials.Policy(fallback),
-		Service: credentials.Service,
-		File:    file,
+		Policy:      credentials.Policy(fallback),
+		Service:     credentials.Service,
+		File:        file,
+		Interactive: interactive,
 	})
 }
