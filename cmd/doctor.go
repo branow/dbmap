@@ -271,6 +271,11 @@ func advise(f *cmdutil.Factory, err error) {
 			"then set the connection's %s parameter to that file\n", connect.CredCacheParam)
 		return
 	}
+	var cross *connect.CrossRealmError
+	if errors.As(err, &cross) {
+		fmt.Fprintf(f.IO.ErrOut, "remedy: %s\n", cross.Remedy())
+		return
+	}
 	var unsupported *connect.UnsupportedError
 	if errors.As(err, &unsupported) && unsupported.Remedy != "" {
 		fmt.Fprintf(f.IO.ErrOut, "remedy: %s\n", unsupported.Remedy)
