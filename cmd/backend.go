@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"net/url"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -61,19 +62,27 @@ func newBackendAdd(f *cmdutil.Factory) *cobra.Command {
 // addBackend collects the settings, verifies before it stores anything, then
 // writes the api key to the keychain and the rest to the config file.
 func addBackend(c *cobra.Command, f *cmdutil.Factory, name string, opts *backendOptions) error {
-	if err := ask(f, &opts.provider, "--provider", "provider", string(config.Anthropic),
-		true); err != nil {
+	if err := require(&opts.provider, "--provider", string(config.Anthropic), true); err != nil {
 		return err
 	}
 	provider, err := config.ParseProvider(opts.provider)
 	if err != nil {
 		return err
 	}
-	if err := ask(f, &opts.model, "--model", "model", "", false); err != nil {
+	if err := require(&opts.model, "--model", "", false); err != nil {
 		return err
 	}
-	if err := ask(f, &opts.baseURL, "--base-url", "base url", "", false); err != nil {
-		return err
+	// A base url is meaningless for a provider that shells out to a local
+	// binary, so it is neither asked for nor accepted there.
+	if opts.baseURL != "" && !config.UsesBaseURL(provider) {
+		return &cmdutil.ValidationError{Field: "--base-url", Value: opts.baseURL,
+			Reason: "the " + string(provider) + " provider has no endpoint"}
+	}
+	if opts.baseURL != "" {
+		if u, err := url.Parse(opts.baseURL); err != nil || u.Scheme == "" || u.Host == "" {
+			return &cmdutil.ValidationError{Field: "--base-url", Value: opts.baseURL,
+				Reason: "must be an absolute http(s) url"}
+		}
 	}
 
 	entry := config.Backend{Provider: provider, Model: opts.model, BaseURL: opts.baseURL}

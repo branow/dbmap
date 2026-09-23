@@ -1,6 +1,7 @@
 package cmdutil
 
 import (
+	"context"
 	"errors"
 
 	"github.com/branow/dbmap/internal/config"
@@ -58,6 +59,7 @@ var rules = []struct {
 }{
 	{ExitCancelled, is(ErrCancelled)},
 	{ExitCancelled, is(iostreams.ErrCancelled)},
+	{ExitCancelled, is(context.Canceled)},
 
 	{ExitValidation, is(iostreams.ErrNoInput)},
 	{ExitValidation, as[*ValidationError]},

@@ -70,23 +70,21 @@ func newConnectionAdd(f *cmdutil.Factory) *cobra.Command {
 // writes the secret to the keychain and the rest to the config file.
 func addConnection(c *cobra.Command, f *cmdutil.Factory, name string,
 	opts *connectionOptions) error {
-	if err := ask(f, &opts.engine, "--engine", "engine", string(config.SQLServer),
-		true); err != nil {
+	if err := require(&opts.engine, "--engine", string(config.SQLServer), true); err != nil {
 		return err
 	}
 	engine, err := config.ParseEngine(opts.engine)
 	if err != nil {
 		return err
 	}
-	if err := ask(f, &opts.host, "--host", "host", "", true); err != nil {
+	if err := require(&opts.host, "--host", "", true); err != nil {
 		return err
 	}
-	if err := ask(f, &opts.database, "--database", "database", "", false); err != nil {
+	if err := require(&opts.database, "--database", "", false); err != nil {
 		return err
 	}
 	allowed := config.Auths(engine)
-	if err := ask(f, &opts.auth, "--auth", "auth ("+strings.Join(allowed, ", ")+")",
-		allowed[0], true); err != nil {
+	if err := require(&opts.auth, "--auth", allowed[0], true); err != nil {
 		return err
 	}
 	auth, err := config.ParseAuth(engine, opts.auth)
@@ -94,7 +92,7 @@ func addConnection(c *cobra.Command, f *cmdutil.Factory, name string,
 		return err
 	}
 	if config.NeedsUsername(auth) {
-		if err := ask(f, &opts.username, "--username", "username", "", true); err != nil {
+		if err := require(&opts.username, "--username", "", true); err != nil {
 			return err
 		}
 	}

@@ -4,8 +4,11 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/branow/dbmap/cmd"
 	"github.com/branow/dbmap/internal/cmdutil"
@@ -26,8 +29,13 @@ func run() int {
 		fmt.Fprintln(os.Stderr, "dbmap:", err)
 		return cmdutil.ExitCode(err)
 	}
+	// A build can run for minutes, so it has to be interruptible. Cancelling the
+	// context lets the pipeline stop where it is rather than be killed mid-write.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
 	root := cmd.NewRoot(factory, cmd.Build{Version: version, Commit: commit, Date: date})
-	if err := root.Execute(); err != nil {
+	if err := root.ExecuteContext(ctx); err != nil {
 		fmt.Fprintln(factory.IO.ErrOut, "dbmap:", err)
 		return cmdutil.ExitCode(err)
 	}
