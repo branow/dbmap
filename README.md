@@ -264,12 +264,14 @@ walk is exactly the kind of job that can cost a server more than it can spare �
 column's values each read every page they touch — so the expensive query shapes
 are not available to the tool at all:
 
-- Every statement must be provably read-only — it must open with `SELECT` or
-  `WITH` and clear a deny list — and is refused **before a connection is
-  opened** if it cannot be proven. Anything unclassifiable is refused.
+- Every query is a constant in the source, and a test walks all of them and
+  fails if one is not a read. `dbmap` issues no statement it did not author.
+  **Give it a read-only account anyway** — that is what actually guarantees it,
+  and it is the operator's call, not the tool's.
 - Every statement carries its engine's resource cap: `OPTION (MAXDOP 1,
   MAX_GRANT_PERCENT = 1)` on SQL Server, and on PostgreSQL a read-only
-  transaction with a statement timeout and parallelism disabled.
+  transaction with a statement timeout and parallelism disabled. These are
+  instructions the *server* enforces, not checks `dbmap` makes on itself.
 - Row counts and sizes come from catalog statistics. There is no `COUNT(*)` and
   no `sp_spaceused` anywhere in the tool.
 - Samples read `TOP (n)` / `LIMIT n` with **no `ORDER BY`**, so sampling a

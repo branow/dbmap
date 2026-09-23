@@ -2,7 +2,6 @@ package sqlserver
 
 import (
 	"context"
-	"errors"
 	"strconv"
 
 	"github.com/branow/dbmap/internal/engine"
@@ -52,11 +51,7 @@ func parseHealth(rows [][]string) *engine.Reading {
 func (e *Engine) Health(ctx context.Context, conn engine.Conn) (engine.Health, error) {
 	rows, err := e.query(ctx, conn, HealthQuery())
 	if err != nil {
-		// A refusal is this tool's own SQL being wrong: a bug, not a reading.
-		var refused *engine.RefusedError
-		if errors.As(err, &refused) {
-			return engine.Health{}, err
-		}
+		// A reading that did not arrive is unknown, never healthy.
 		return engine.Classify(nil), nil
 	}
 	return engine.Classify(parseHealth(rows)), nil

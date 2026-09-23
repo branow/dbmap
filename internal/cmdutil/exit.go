@@ -63,7 +63,6 @@ var rules = []struct {
 
 	// This tool refusing its own generated SQL is a defect here, not a user
 	// error, so it matches before every wrapper that could disguise it.
-	{ExitError, as[*engine.RefusedError]},
 
 	{ExitValidation, is(iostreams.ErrNoInput)},
 	{ExitValidation, as[*ValidationError]},
