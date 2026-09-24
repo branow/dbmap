@@ -62,9 +62,13 @@ func newIndex(f *cmdutil.Factory) *cobra.Command {
 			"touches fifty procedures therefore fetches fifty bodies and describes " +
 			"only the ones whose text actually changed.\n\n" +
 			"With no connection named, the active profile's connection is used. " +
-			"--match and --limit write a PARTIAL index, covering only what they " +
-			"selected. The persistent --force flag rebuilds everything, ignoring " +
-			"both tiers.",
+			"--match and --limit cover only what they selected and MERGE into the " +
+			"tree already there, so rows they did not touch keep their " +
+			"descriptions and their fingerprints. The persistent --force flag " +
+			"rebuilds everything, ignoring both tiers.\n\n" +
+			"Progress goes to stderr and the summary to stdout, so -o json pipes " +
+			"cleanly while a person watching the terminal sees the work. --quiet " +
+			"silences the progress.",
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(c *cobra.Command, args []string) error {
 			return runIndex(c.Context(), f, arg(args), &opts)
