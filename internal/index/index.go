@@ -72,7 +72,15 @@ type Summary struct {
 
 	// Objects is how many the build covered after Match and Limit.
 	Objects int
-	// Fetched came from the database this run, Reused from the cache.
+	// Refetch is how many selected objects the modify signal says must be
+	// re-read. A dry run knows this and stops there: which of them will be
+	// DESCRIBED is decided by a fingerprint of content it has not fetched.
+	Refetch int
+	// Untouched is how many the modify signal proves unchanged since the last
+	// build, so nothing is re-read for them at all.
+	Untouched int
+	// Fetched came from the database this run, Reused from the fetch cache.
+	// Both are zero on a dry run, which consults neither.
 	Fetched int
 	Reused  int
 	// Described got a new sentence, Unchanged kept the previous build's. A kind
@@ -134,10 +142,10 @@ func Build(ctx context.Context, src Source, client llm.Client, opts Options) (Su
 	summary.Objects = len(selected)
 	summary.Dropped = work.Dropped
 	summary.Reasons = reasons(selected, work.Reasons)
+	summary.Refetch = total(summary.Reasons)
+	summary.Untouched = len(selected) - summary.Refetch
 
 	if opts.DryRun {
-		summary.Fetched = total(summary.Reasons)
-		summary.Reused = len(selected) - summary.Fetched
 		return summary, nil
 	}
 

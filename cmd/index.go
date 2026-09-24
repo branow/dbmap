@@ -364,16 +364,28 @@ func report(f *cmdutil.Factory, summary index.Summary) error {
 		{Name: "database", Value: summary.Database},
 		{Name: "out", Value: summary.Dir},
 		{Name: "objects", Value: summary.Objects},
-		{Name: "fetched", Value: summary.Fetched},
-		{Name: "reused", Value: summary.Reused},
-		{Name: "dropped", Value: len(summary.Dropped)},
-		{Name: "reasons", Value: reasons(summary.Reasons)},
 	}
 	if summary.DryRun {
-		record = append(record, output.Field{Name: "dry-run", Value: true})
+		// A dry run reads the manifest and stops, so it knows exactly what the
+		// modify signal says. It does NOT know how many objects will be
+		// described: that is decided by a fingerprint of content it has not
+		// fetched. Reporting a describe count here would be a guess printed in
+		// the same column a real run fills with a fact.
+		record = append(record,
+			output.Field{Name: "dry-run", Value: true},
+			output.Field{Name: "refetch", Value: summary.Refetch},
+			output.Field{Name: "untouched", Value: summary.Untouched},
+			output.Field{Name: "dropped", Value: len(summary.Dropped)},
+			output.Field{Name: "reasons", Value: reasons(summary.Reasons)},
+			output.Field{Name: "describe", Value: pending(summary)},
+		)
 		return f.Writer().Show(record)
 	}
 	record = append(record,
+		output.Field{Name: "fetched", Value: summary.Fetched},
+		output.Field{Name: "reused", Value: summary.Reused},
+		output.Field{Name: "dropped", Value: len(summary.Dropped)},
+		output.Field{Name: "reasons", Value: reasons(summary.Reasons)},
 		output.Field{Name: "described", Value: summary.Described},
 		output.Field{Name: "unchanged", Value: summary.Unchanged},
 		output.Field{Name: "sampled", Value: summary.Sampled},
@@ -387,6 +399,17 @@ func report(f *cmdutil.Factory, summary index.Summary) error {
 		output.Field{Name: "cost", Value: summary.Usage.Cost},
 	)
 	return f.Writer().Show(record)
+}
+
+// pending is what a dry run can honestly say about the describe stage: an
+// upper bound, because only an object that is refetched can be redescribed, and
+// no lower bound at all.
+func pending(summary index.Summary) string {
+	if summary.Refetch == 0 {
+		return "none; nothing is being refetched"
+	}
+	return "at most " + strconv.Itoa(summary.Refetch) +
+		", decided by content fingerprint after the fetch"
 }
 
 // reasons renders the fetch tally in the planner's order, so two builds report
