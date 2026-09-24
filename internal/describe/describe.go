@@ -42,10 +42,6 @@ var Schema = json.RawMessage(`{
           "sentence": {
             "type": "string",
             "description": "` + sentenceField + `"
-          },
-          "lookup": {
-            "type": "boolean",
-            "description": "For tables only: true when the table is a lookup of codes and their meanings."
           }
         }
       }
@@ -56,7 +52,6 @@ var Schema = json.RawMessage(`{
 type answer struct {
 	Name     string `json:"name"`
 	Sentence string `json:"sentence"`
-	Lookup   bool   `json:"lookup"`
 }
 
 type reply struct {
@@ -65,8 +60,9 @@ type reply struct {
 
 // Result is what a run produced.
 type Result struct {
+	// Sentences is keyed by the REQUESTED object key, never by the string the
+	// model echoed back: an answer that names nothing asked for is dropped.
 	Sentences map[string]string
-	Lookups   map[string]bool
 	// Missing lists objects the model skipped, reported rather than left blank.
 	Missing []string
 	// Failed lists batches that errored; a failed batch is skipped, never fatal.
@@ -82,10 +78,12 @@ type Logger interface {
 
 // Options configure one describe run.
 type Options struct {
-	Model  string
-	Chars  int
-	Max    int
-	Logger Logger
+	Model string
+	Chars int
+	Max   int
+	// Workers is how many batches may be in flight. 0 means DefaultWorkers.
+	Workers int
+	Logger  Logger
 }
 
 func (o Options) chars() int {
@@ -162,7 +160,7 @@ func BatchPrompt(items []Item) string {
 // All describes every input it can, in batches. A failing batch is reported on
 // Result rather than aborting the run.
 func All(ctx context.Context, client llm.Client, inputs []Input, opts Options) (Result, error) {
-	result := Result{Sentences: map[string]string{}, Lookups: map[string]bool{}}
+	result := Result{Sentences: map[string]string{}}
 
 	items, err := Prepare(inputs)
 	if err != nil {
@@ -190,16 +188,24 @@ func All(ctx context.Context, client llm.Client, inputs []Input, opts Options) (
 			continue
 		}
 
-		// Matched by name, never by position.
+		// Matched by name, never by position - and resolved against the keys
+		// this batch actually asked about, never trusted as written.
+		asked := requested(batch)
 		for _, a := range parsed.Objects {
 			sentence := strings.TrimSpace(a.Sentence)
-			if a.Name == "" || sentence == "" {
+			if sentence == "" {
 				continue
 			}
-			result.Sentences[a.Name] = sentence
-			if a.Lookup {
-				result.Lookups[a.Name] = true
+			key, ok := resolve(asked, a.Name)
+			if !ok {
+				// Filing the sentence under the name the model wrote would count
+				// it as described while the object it was asked about reports
+				// missing - both at once, from the same batch.
+				warn(opts.Logger, fmt.Sprintf("describe: batch %d/%d answered for %q, "+
+					"which it was not asked about", i+1, len(batches), a.Name))
+				continue
 			}
+			result.Sentences[key] = sentence
 		}
 		info(opts.Logger, fmt.Sprintf("describe: batch %d/%d (%d objects)", i+1, len(batches), len(batch)))
 	}
@@ -213,6 +219,41 @@ func All(ctx context.Context, client llm.Client, inputs []Input, opts Options) (
 		warn(opts.Logger, "describe: no sentence for "+strings.Join(result.Missing, ", "))
 	}
 	return result, nil
+}
+
+// requested indexes a batch's keys by their lower-cased spelling, so an answer
+// is matched back case-insensitively without letting a name through that was
+// never asked for.
+func requested(batch []Item) map[string]string {
+	asked := make(map[string]string, len(batch))
+	for _, item := range batch {
+		asked[strings.ToLower(item.Key)] = item.Key
+	}
+	return asked
+}
+
+// resolve maps one answer's name onto the key it was asked about. A model that
+// drops the schema qualifier is still understood, as long as exactly one key in
+// the batch ends that way.
+func resolve(asked map[string]string, name string) (string, bool) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "", false
+	}
+	if key, ok := asked[strings.ToLower(name)]; ok {
+		return key, true
+	}
+	suffix := "." + strings.ToLower(name)
+	found := ""
+	for lowered, key := range asked {
+		if strings.HasSuffix(lowered, suffix) {
+			if found != "" {
+				return "", false
+			}
+			found = key
+		}
+	}
+	return found, found != ""
 }
 
 func info(logger Logger, message string) {
