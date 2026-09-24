@@ -377,10 +377,11 @@ func TestHealthIsAskedBeforeEveryStage(t *testing.T) {
 
 	mustBuild(t, source, client, opts)
 
-	// manifest, structure, modules, then one per table sampled.
-	if len(source.probes) < 3+len(source.sampled) {
-		t.Fatalf("probed %d times, want one before every stage and every table",
-			len(source.probes))
+	// manifest, structure, modules, then one per table sampled - and exactly
+	// one each: a second reading before the same read is a wasted round trip.
+	if len(source.probes) != 3+len(source.sampled) {
+		t.Fatalf("probed %d times, want one before every stage and every table (%d)",
+			len(source.probes), 3+len(source.sampled))
 	}
 }
 
