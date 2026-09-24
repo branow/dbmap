@@ -86,11 +86,26 @@ func (c *Config) Save() error {
 	if err := os.MkdirAll(filepath.Dir(c.path), 0o700); err != nil {
 		return err
 	}
-	tmp := c.path + ".tmp"
-	if err := os.WriteFile(tmp, raw, 0o600); err != nil {
+	// A unique name, not path+".tmp": two dbmap processes writing at once would
+	// otherwise share one scratch file and rename each other's half of it.
+	tmp, err := os.CreateTemp(filepath.Dir(c.path), ".config-*")
+	if err != nil {
 		return err
 	}
-	if err := os.Rename(tmp, c.path); err != nil {
+	name := tmp.Name()
+	defer os.Remove(name)
+
+	if _, err := tmp.Write(raw); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Chmod(name, 0o600); err != nil {
+		return err
+	}
+	if err := os.Rename(name, c.path); err != nil {
 		return fmt.Errorf("replacing %s: %w", filepath.Base(c.path), err)
 	}
 	return nil
