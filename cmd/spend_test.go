@@ -3,12 +3,15 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/branow/dbmap/internal/cmdutil"
+	"github.com/branow/dbmap/internal/index"
 	"github.com/branow/dbmap/internal/iostreams"
 	"github.com/branow/dbmap/llm"
 )
@@ -109,6 +112,34 @@ func (f *flaky) Complete(context.Context, llm.Request) (*llm.Response, error) {
 		Structured: json.RawMessage(`{}`),
 		Usage:      llm.Usage{InputTokens: 7},
 	}, nil
+}
+
+// A backend that answers every call while naming nothing it was asked about
+// leaves the description column empty with no failed batch to show for it. That
+// is not a successful build.
+func TestABuildThatDescribedNothingIsNotASuccess(t *testing.T) {
+	cases := []struct {
+		name    string
+		summary index.Summary
+		wantErr bool
+	}{
+		{"clean", index.Summary{Described: 3}, false},
+		{"failed batches", index.Summary{Failed: []error{errors.New("boom")}}, true},
+		{"answers for nothing asked", index.Summary{Missing: []string{"dbo.Orders"}}, true},
+		{"dry run", index.Summary{DryRun: true, Missing: []string{"dbo.Orders"}}, false},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			err := describeOutcome(c.summary)
+			if c.wantErr != (err != nil) {
+				t.Fatalf("err = %v, want error: %v", err, c.wantErr)
+			}
+			if err != nil && cmdutil.ExitCode(err) != cmdutil.ExitUnavailable {
+				t.Fatalf("exit code = %d, want unavailable", cmdutil.ExitCode(err))
+			}
+		})
+	}
 }
 
 // Describe batches run concurrently, so the progress logger is written from
