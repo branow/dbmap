@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -34,31 +35,35 @@ type Result struct {
 	BodyFiles   int
 }
 
-// Write renders the whole index tree for one database. A catalog with no
-// objects is not written at all.
-func Write(dir string, entries []catalog.Entry) (Result, error) {
+// Write renders the index tree for one database, MERGING entries into whatever
+// the last build left there. A narrowed build covers only the objects it
+// selected, so replacing a catalog wholesale would delete the rows it did not
+// look at - and with them the staleness state the next build reads back, which
+// turns every unselected object into a new one and buys its description again.
+//
+// dropped are objects the database no longer has: their rows and their detail
+// files go. Everything else present and unmentioned stays exactly as it was.
+func Write(dir string, entries []catalog.Entry, dropped []string) (Result, error) {
 	for _, sub := range []string{columnsDir, bodiesDir} {
 		if err := os.MkdirAll(filepath.Join(dir, sub), dirMode); err != nil {
 			return Result{}, err
 		}
 	}
 
+	gone := make(map[string]bool, len(dropped))
+	for _, key := range dropped {
+		gone[key] = true
+	}
+
 	var result Result
 	for _, c := range Catalogs {
-		var rows [][]string
-		for _, entry := range entries {
-			if entry.Object.Kind == c.Kind {
-				rows = append(rows, row(c, entry))
-			}
-		}
-		if len(rows) == 0 {
-			continue
-		}
-		path := filepath.Join(dir, c.File)
-		if err := os.WriteFile(path, []byte(TSV(Header(c), rows)), fileMode); err != nil {
+		written, err := merge(dir, c, entries, gone)
+		if err != nil {
 			return Result{}, err
 		}
-		result.Catalogs = append(result.Catalogs, Written{File: c.File, Rows: len(rows)})
+		if written != nil {
+			result.Catalogs = append(result.Catalogs, *written)
+		}
 	}
 
 	for _, entry := range entries {
@@ -84,7 +89,87 @@ func Write(dir string, entries []catalog.Entry) (Result, error) {
 		result.BodyFiles++
 	}
 
+	if err := Remove(dir, dropped); err != nil {
+		return Result{}, err
+	}
 	return result, nil
+}
+
+// merge rewrites one catalog file from the rows already there plus the rows
+// this build produced. Rows are keyed by name and sorted, so the file does not
+// depend on which objects a run happened to select.
+func merge(dir string, c Catalog, entries []catalog.Entry, gone map[string]bool) (*Written, error) {
+	path := filepath.Join(dir, c.File)
+	width := len(Header(c))
+
+	rows := map[string][]string{}
+	previous, err := os.ReadFile(path)
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+	case err != nil:
+		return nil, err
+	default:
+		for key, cells := range parseRows(string(previous), width) {
+			rows[key] = cells
+		}
+	}
+
+	for _, entry := range entries {
+		if entry.Object.Kind != c.Kind {
+			continue
+		}
+		rows[entry.Key()] = row(c, entry)
+	}
+	for key := range gone {
+		delete(rows, key)
+	}
+
+	if len(rows) == 0 {
+		// The kind is empty now. Leaving the old file would leave rows for
+		// objects the catalog no longer has.
+		if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return nil, err
+		}
+		return nil, nil
+	}
+
+	ordered := make([][]string, 0, len(rows))
+	for _, key := range sortedKeys(rows) {
+		ordered = append(ordered, rows[key])
+	}
+	if err := os.WriteFile(path, []byte(TSV(Header(c), ordered)), fileMode); err != nil {
+		return nil, err
+	}
+	return &Written{File: c.File, Rows: len(ordered)}, nil
+}
+
+// parseRows reads a catalog file back as raw cells, padded to the current
+// width so a file written by an older shape still merges.
+func parseRows(content string, width int) map[string][]string {
+	rows := map[string][]string{}
+	for _, line := range strings.Split(content, "\n") {
+		if strings.TrimSpace(line) == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		cells := strings.Split(line, tab)
+		if cells[0] == "name" || cells[0] == "" || len(cells) < width-1 {
+			continue
+		}
+		for len(cells) < width {
+			cells = append(cells, "")
+		}
+		rows[cells[0]] = cells[:width]
+	}
+	return rows
+}
+
+func sortedKeys(rows map[string][]string) []string {
+	keys := make([]string, 0, len(rows))
+	for key := range rows {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 // ParseCatalog reads one catalog file back into the state the planner expects.
@@ -143,8 +228,8 @@ func ReadState(dir string) (map[string]catalog.State, error) {
 	return state, nil
 }
 
-// Remove deletes the per-object files of dropped objects; their catalog rows go
-// by being rewritten without them.
+// Remove deletes the per-object files of dropped objects; their catalog rows
+// are dropped by the merge that rewrote the catalog.
 func Remove(dir string, keys []string) error {
 	for _, key := range keys {
 		for _, path := range []string{

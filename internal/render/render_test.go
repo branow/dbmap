@@ -58,7 +58,7 @@ func procedure() catalog.Entry {
 func write(t *testing.T, entries ...catalog.Entry) (string, render.Result) {
 	t.Helper()
 	dir := t.TempDir()
-	result, err := render.Write(dir, entries)
+	result, err := render.Write(dir, entries, nil)
 	if err != nil {
 		t.Fatalf("Write: %v", err)
 	}
