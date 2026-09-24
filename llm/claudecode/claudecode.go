@@ -89,6 +89,12 @@ func (p *provider) Complete(ctx context.Context, req llm.Request) (*llm.Response
 
 	var stdout, stderr bytes.Buffer
 	cmd := exec.CommandContext(ctx, p.cfg.Command, args...)
+	// Run somewhere neutral. The CLI loads the project instructions of whatever
+	// directory it starts in, so the same prompt would answer differently
+	// depending on where the host program happened to be run from - and the
+	// working directory is in no cache key, so that difference would be
+	// invisible.
+	cmd.Dir = os.TempDir()
 	cmd.Stdin = strings.NewReader(req.Prompt)
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
