@@ -120,9 +120,16 @@ func snapshotPath(env environment) (string, error) {
 	return filepath.Join(dir, "dbmap", "krb5cc"), nil
 }
 
+// MITCacheDir is where the MIT default credential cache lives. Hard-coded
+// rather than taken from os.TempDir, which honours TMPDIR - and on macOS that
+// is a per-user directory under /var/folders, so the "default" this names would
+// be a path no Kerberos tool has ever written to, in a remedy line the user is
+// being asked to act on.
+const MITCacheDir = "/tmp"
+
 // defaultCache is the MIT default, and what a remedy names.
 func defaultCache(env environment) string {
-	return filepath.Join(os.TempDir(), "krb5cc_"+env.uid)
+	return filepath.Join(MITCacheDir, "krb5cc_"+env.uid)
 }
 
 // readable refuses a cache that is missing or unopenable, so an absent ticket
