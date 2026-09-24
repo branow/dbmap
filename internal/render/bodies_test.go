@@ -29,7 +29,7 @@ func TestEveryModuleKindGetsItsBodyOnDisk(t *testing.T) {
 		module(catalog.View, "OpenOrders", "SELECT id FROM dbo.Orders WHERE StatusID = 1"),
 	}
 
-	result, err := Write(dir, entries)
+	result, err := Write(dir, entries, nil)
 	if err != nil {
 		t.Fatalf("Write: %v", err)
 	}
@@ -69,7 +69,7 @@ func TestATableGetsNoBodyFile(t *testing.T) {
 			Structure: catalog.Structure{Columns: []catalog.Column{{Name: "ID", Type: "int"}}},
 		},
 		module(catalog.Procedure, "Encrypted", ""),
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("Write: %v", err)
 	}
@@ -88,7 +88,7 @@ func TestABodyFileCarriesItsOwnContext(t *testing.T) {
 	dir := t.TempDir()
 	entry := module(catalog.Procedure, "OrderStatusSet", "UPDATE dbo.Orders SET StatusID = @s")
 
-	if _, err := Write(dir, []catalog.Entry{entry}); err != nil {
+	if _, err := Write(dir, []catalog.Entry{entry}, nil); err != nil {
 		t.Fatalf("Write: %v", err)
 	}
 	data, err := os.ReadFile(filepath.Join(dir, bodiesDir, "dbo.OrderStatusSet.sql"))
@@ -116,7 +116,7 @@ func TestATruncatedBodySaysSo(t *testing.T) {
 	dir := t.TempDir()
 	long := "SELECT 1 " + strings.Repeat("x", catalog.MaxDefinition)
 
-	if _, err := Write(dir, []catalog.Entry{module(catalog.Procedure, "Big", long)}); err != nil {
+	if _, err := Write(dir, []catalog.Entry{module(catalog.Procedure, "Big", long)}, nil); err != nil {
 		t.Fatalf("Write: %v", err)
 	}
 	data, _ := os.ReadFile(filepath.Join(dir, bodiesDir, "dbo.Big.sql"))
@@ -125,7 +125,7 @@ func TestATruncatedBodySaysSo(t *testing.T) {
 	}
 
 	short := module(catalog.Procedure, "Small", "SELECT 1")
-	if _, err := Write(dir, []catalog.Entry{short}); err != nil {
+	if _, err := Write(dir, []catalog.Entry{short}, nil); err != nil {
 		t.Fatalf("Write: %v", err)
 	}
 	data, _ = os.ReadFile(filepath.Join(dir, bodiesDir, "dbo.Small.sql"))
@@ -145,7 +145,7 @@ func TestRemoveTakesBothDetailFiles(t *testing.T) {
 			Structure: catalog.Structure{Columns: []catalog.Column{{Name: "ID", Type: "int"}}},
 		},
 	}
-	if _, err := Write(dir, entries); err != nil {
+	if _, err := Write(dir, entries, nil); err != nil {
 		t.Fatalf("Write: %v", err)
 	}
 

@@ -166,17 +166,13 @@ func Build(ctx context.Context, src Source, client llm.Client, opts Options) (Su
 	summary.Failed = result.Failed
 	summary.Usage = result.Usage
 
-	written, err := write(dir, selected, split, result, state)
+	written, err := write(dir, selected, split, result, state, work.Dropped)
 	if err != nil {
 		return summary, err
 	}
 	summary.Catalogs = written.Catalogs
 	summary.ColumnFiles = written.ColumnFiles
 	summary.BodyFiles = written.BodyFiles
-
-	if err := render.Remove(dir, work.Dropped); err != nil {
-		return summary, err
-	}
 	return summary, nil
 }
 
@@ -412,6 +408,7 @@ func write(
 	split plan.DescribePlan,
 	result describe.Result,
 	state map[string]catalog.State,
+	dropped []string,
 ) (render.Result, error) {
 	byKey := make(map[string]catalog.Entry, len(selected))
 	for _, entry := range split.Unchanged {
@@ -432,5 +429,5 @@ func write(
 			entries = append(entries, entry)
 		}
 	}
-	return render.Write(dir, entries)
+	return render.Write(dir, entries, dropped)
 }
