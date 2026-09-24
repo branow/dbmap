@@ -39,6 +39,15 @@ rather than in a sidecar file. A parallel state file drifts out of step with the
 index beside it, and `modified` earns its place for a reader anyway — a
 procedure untouched since 2018 says something a description cannot.
 
+That choice is why a build **merges** into the tree it finds rather than
+replacing it. A narrowed build (`--match`, `--limit`) covers only the objects it
+selected, and rewriting a catalog from that selection alone would delete the
+fingerprint of every object the run did not look at — so the next full build
+would see them all as new and buy every description again. A row is replaced
+when this run covered it, removed when the database no longer has the object,
+and otherwise left exactly as it was. Rows are written sorted by name, so the
+file does not depend on which objects a run happened to select.
+
 Nothing derivable is stored. A table's sample depth is `min(rows, 25)` and
 `rows` is already a column.
 
@@ -77,10 +86,12 @@ Modules hash their definition, normalised for line endings and trailing
 whitespace so a deployment tool rewriting CRLF does not read as an edit.
 
 Tables have no definition, so they hash the structure a reader would need:
-columns with type, nullability and identity, primary key, indexes, foreign keys,
-trigger count, plus sample depth. The canonical form is built as explicit lines
-rather than serialised, so adding an unrelated field to an internal struct
-cannot move the hash.
+columns with type, nullability, identity and whether they are generated, primary
+key, indexes, foreign keys, trigger count, plus sample depth. Every column fact
+the index renders appears here; one the reader can see but the hash cannot is a
+fact that changes the tree without ever earning a fresh description. The
+canonical form is built as explicit lines rather than serialised, so adding an
+unrelated field to an internal struct cannot move the hash.
 
 Sample row *values* are deliberately excluded. They change on every run against
 a live database and would leave every table permanently dirty.
@@ -127,7 +138,12 @@ version listed `text` as unsampleable — correct for SQL Server, where it is a
 deprecated large-object type, and wrong for PostgreSQL, where it is the ordinary
 string type. The effect was that a three-row status lookup projected its integer
 key and nothing else, so the describer never saw `Incomplete`, `Pending` or
-`CC Declined` — the exact values the design exists to capture. Every cell is
+`CC Declined` — the exact values the design exists to capture.
+
+The same mistake survived that fix on the other engine, by width rather than by
+type name: a column whose width rendered as `(max)` was withheld, and `(max)` is
+how SQL Server spells its ordinary string type. A status lookup there projected
+its integer key and nothing else for exactly the same reason. Every cell is
 capped anyway, so unboundedness is not a reason to skip a column. Only genuinely
 opaque values are withheld: binary payloads, spatial types, row versions.
 
@@ -164,6 +180,10 @@ So, non-negotiably:
   can still be fixed: a test walks every query each engine builds and fails if
   one is not a read. At run time what prevents a write is the database account's
   permissions, plus the read-only transaction where the engine offers one.
+- **Model usage is metered where the money is spent.** The meter sits under the
+  response cache, so an answer replayed from disk is not billed a second time. A
+  build that summed the usage carried on its responses would invoice a resumed
+  run for everything the first one paid.
 - **Every statement carries its engine's resource cap.** SQL Server appends
   `OPTION (MAXDOP 1, MAX_GRANT_PERCENT = 1)`; `MAX_GRANT_PERCENT` is
   engine-enforced, so a query wanting more memory spills to tempdb instead of
@@ -174,9 +194,14 @@ So, non-negotiably:
   `sys.dm_db_partition_stats`, `pg_class.reltuples` — never a scan.
 - **Samples use `TOP (n)` / `LIMIT n` with no `ORDER BY`.** An `ORDER BY` ranks
   the whole table; without one the engine stops after n rows.
-- **Health is checked before every source and every batch**, not once at
-  startup. An unreadable reading is *unknown*, never healthy: not being able to
-  see the floor is not the same as being above it.
+- **Health is checked before every statement group**, not once at startup, and
+  in exactly one place: the engine, immediately before the statement it guards.
+  A caller above checking as well does not make the tool safer, it doubles the
+  round trips — on a sampling run that is two health queries per table. The
+  check sits with the statement for the same reason the resource guard does: a
+  guard applied per call site is a guard the next call site forgets. An
+  unreadable reading is *unknown*, never healthy: not being able to see the
+  floor is not the same as being above it.
 
 ## Secrets and personal data
 
@@ -192,6 +217,13 @@ So, non-negotiably:
   it withheld, so the describer knows they exist.
 - **Every sampled cell is capped** at 200 characters.
 - **Sampled values never reach the index.** They are transient describer input.
+- **The server's certificate is verified.** TLS is always on, and the chain and
+  host name are checked unless the connection record opts out with
+  `--trust-server-certificate`. Encryption that verifies nobody encrypts the
+  traffic to whoever answered, and a default that quietly does so is worse than
+  one a user had to choose. The opt-out exists because the realistic
+  alternative, for a server behind an internal certificate authority, is a user
+  turning encryption off entirely.
 - **Secrets never enter the config file.** They live in the OS keychain, or come
   from the environment. There is no silent fallback to a plaintext file: a
   keychain failure is an error naming the fix, because a transient failure would
@@ -207,9 +239,19 @@ alone rather than being dropped. On a schema of a thousand-odd objects that is
 the difference between a few hundred calls and a few thousand.
 
 Answers come back keyed by object name and are matched **by name, not
-position**, so a reordered response still lands correctly. An object the model
-skipped is reported, not silently blank. A failed batch is logged and skipped —
-a partial index beats none.
+position**, so a reordered response still lands correctly. The name is resolved
+against the keys the batch actually asked about — case-insensitively, and
+allowing a dropped schema qualifier where that is unambiguous — never trusted as
+written. Filing a sentence under whatever the model echoed back counted the
+object as described while the object itself reported missing, both from the same
+batch. An object the model skipped is reported, not silently blank, and a run
+that left any object without a sentence fails, because a tree whose description
+column is empty is not a success however few batches errored.
+
+Batches run concurrently, several at a time, and are merged back in batch order
+so the result does not depend on which finished first. Describing is the long
+pole of a build and the batches are independent; the ceiling that matters is the
+provider's rate limit, not this machine.
 
 Bodies are capped at 16,000 characters for the prompt, which carries the large
 majority of bodies whole. The cache cap is higher, so the stored copy is always the

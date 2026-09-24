@@ -344,7 +344,9 @@ func TestACappedSampleRunTakesTheCompleteTableFirst(t *testing.T) {
 	}
 }
 
-// Health is asked before every source, not once at startup.
+// Health is asked before every statement group, not once at startup. The check
+// lives in the engine, closest to the statement it guards, so a new caller
+// above cannot forget it.
 func TestAnUnhealthyServerHaltsBeforeTheManifest(t *testing.T) {
 	source, client, opts := table(), &model{}, options(t)
 	client.source = source

@@ -177,6 +177,23 @@ all the real work. The result is the same.
 
 `--force` rebuilds everything and ignores both tiers.
 
+`--dry-run` reports only what it can actually know. It reads the manifest and
+stops, so it can say how many objects must be re-read and why — but not how many
+will be described, because that is decided by a fingerprint of content it has
+not fetched. It reports an upper bound and says so, rather than printing a guess
+in the column a real run fills with a fact:
+
+```
+$ dbmap index --dry-run
+objects     412
+dry-run     true
+refetch     37
+untouched   375
+dropped     0
+reasons     modified 30, new 7
+describe    at most 37, decided by content fingerprint after the fetch
+```
+
 ## Usage
 
 ### Connections and backends
@@ -197,7 +214,10 @@ dbmap backend add local-llm --provider openai --base-url http://127.0.0.1:11434/
 ```
 
 Supported engines are `postgres` and `sqlserver`; authentication is `scram`
-(PostgreSQL), `sqllogin` (SQL Server) or `kerberos` (both). Kerberos needs no
+(PostgreSQL), `sqllogin` (SQL Server) or `kerberos` (both). TLS is always on and
+the server's certificate is verified; a server behind an internal certificate
+authority this machine does not trust needs `--trust-server-certificate` on the
+connection, which encrypts without proving who answered. Kerberos needs no
 extra configuration — `dbmap` finds your existing tickets, and converts the
 credential cache itself when the driver cannot read the platform's own format.
 Run `kinit` if you have no ticket; that is the whole setup. Backends are
@@ -218,9 +238,33 @@ dbmap index [connection] [flags]
   --dry-run          report the plan; send no query beyond the catalog listing
 ```
 
-`--match` and `--limit` write a *partial* index covering only what they
-selected, which is the right way to try `dbmap` against a database you do not
-own.
+Progress goes to **stderr** and the summary to stdout, so `-o json` pipes
+cleanly while a person watching the terminal sees the work. Every stage that
+does work per object names that object, and a table names itself *before* it is
+read, so a run that stalls says what it stalled on:
+
+```
+manifest: 412 objects
+plan: 37 objects to refetch, 375 objects the modify signal proves untouched
+fetch: structure for 37 objects
+fetch: bodies for 18 objects
+sample: 1/12 dbo.OrderStatuses (3 rows, whole table)
+sample: 2/12 dbo.Orders (25 of 4218914 rows)
+describe: 37 objects in 4 batches, 4 batches at a time
+describe: batch 1/4 answered (12 objects)
+describe: dbo.OrderStatuses  Maps order status codes to their descriptions.
+describe: dbo.Orders  Holds one row per placed order, keyed by id.
+write: tables.tsv (412 rows)
+write: 380 column files, 194 body files under .dbmap/prod/AppCore
+```
+
+`--quiet` silences it.
+
+`--match` and `--limit` cover only what they selected and **merge** into
+whatever the tree already holds: rows they did not touch keep their descriptions
+and their fingerprints, so a narrowed run never makes the next full one pay to
+redescribe the rest. That is what makes them the right way to try `dbmap`
+against a database you do not own.
 
 ### Checking a connection
 
@@ -286,6 +330,10 @@ are not available to the tool at all:
   because a type says nothing about who a value belongs to. A table with nothing
   else in it is never queried at all. Withheld columns are still listed in the
   index, so the description knows they exist.
+- TLS is always on and the server's certificate is verified by default.
+  Encryption that verifies nobody encrypts the traffic to whoever answered, so
+  skipping the check is a per-connection decision a user makes with
+  `--trust-server-certificate`, never a default they were never shown.
 - Sampled values are shown to the model and then discarded. They never reach the
   index and never enter a fingerprint.
 - Procedure bodies are redacted on arrival, before anything is cached or sent:
