@@ -40,12 +40,30 @@ func (d *database) Close() error {
 	return nil
 }
 
-func (d *database) Manifest(context.Context, engine.Conn) ([]catalog.Object, error) {
+// halt is what both real engines do before every statement group they send:
+// read health, and refuse to send when the server has no room or will not say.
+// The fake carries it too, or these tests would pin a contract no engine has.
+func (d *database) halt(ctx context.Context, stage string) error {
+	health, err := d.Health(ctx, nil)
+	if err != nil {
+		return err
+	}
+	return engine.Assert(health, stage)
+}
+
+func (d *database) Manifest(ctx context.Context, _ engine.Conn) ([]catalog.Object, error) {
+	if err := d.halt(ctx, "the manifest"); err != nil {
+		return nil, err
+	}
 	d.manifests++
 	return d.objects, nil
 }
 
-func (d *database) Structure(context.Context, engine.Conn) (map[string]catalog.Structure, error) {
+func (d *database) Structure(ctx context.Context,
+	_ engine.Conn) (map[string]catalog.Structure, error) {
+	if err := d.halt(ctx, "the structure fetch"); err != nil {
+		return nil, err
+	}
 	d.fetches++
 	out := map[string]catalog.Structure{}
 	for key, value := range d.structures {
@@ -54,8 +72,11 @@ func (d *database) Structure(context.Context, engine.Conn) (map[string]catalog.S
 	return out, nil
 }
 
-func (d *database) Modules(_ context.Context, _ engine.Conn,
+func (d *database) Modules(ctx context.Context, _ engine.Conn,
 	keys []string) (map[string]redact.Body, error) {
+	if err := d.halt(ctx, "the module fetch"); err != nil {
+		return nil, err
+	}
 	d.modules = append(d.modules, keys...)
 	bodies := map[string]redact.Body{}
 	for _, key := range keys {
@@ -66,8 +87,11 @@ func (d *database) Modules(_ context.Context, _ engine.Conn,
 	return bodies, nil
 }
 
-func (d *database) Sample(_ context.Context, _ engine.Conn, table engine.Table,
+func (d *database) Sample(ctx context.Context, _ engine.Conn, table engine.Table,
 	n int) (catalog.Sample, error) {
+	if err := d.halt(ctx, "sample "+table.Key()); err != nil {
+		return catalog.Sample{}, err
+	}
 	d.sampled = append(d.sampled, table.Key())
 	rows := d.rows[table.Key()]
 	if len(rows) > n {

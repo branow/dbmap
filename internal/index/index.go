@@ -184,9 +184,6 @@ func Build(ctx context.Context, src Source, client llm.Client, opts Options) (Su
 // checkpoints it so a killed run can be resumed.
 func manifest(ctx context.Context, src Source, cached store,
 	opts Options) ([]catalog.Object, error) {
-	if err := assert(ctx, src, "the manifest"); err != nil {
-		return nil, err
-	}
 	objects, err := src.Manifest(ctx, src.Conn())
 	if err != nil {
 		return nil, err
@@ -319,9 +316,6 @@ func pull(
 	definitions map[string]string,
 	summary *Summary,
 ) error {
-	if err := assert(ctx, src, "the structure fetch"); err != nil {
-		return err
-	}
 	fresh, err := src.Structure(ctx, src.Conn())
 	if err != nil {
 		return err
@@ -336,9 +330,6 @@ func pull(
 
 	bodies := map[string]redact.Body{}
 	if len(keys) > 0 {
-		if err := assert(ctx, src, "the module fetch"); err != nil {
-			return err
-		}
 		bodies, err = src.Modules(ctx, src.Conn(), keys)
 		if err != nil {
 			return err

@@ -10,6 +10,11 @@ import (
 	"github.com/branow/dbmap/internal/redact"
 )
 
+// Health is on Reader because the engine asks it before every statement group
+// it sends. This package does not ask again: a second reading before the same
+// read is a second round trip that answers the question the engine just
+// answered.
+
 // Reader is the half of engine.Engine a build reads through.
 type Reader interface {
 	Manifest(ctx context.Context, conn engine.Conn) ([]catalog.Object, error)
@@ -70,17 +75,4 @@ func plural(n int, noun string) string {
 		return "1 " + noun
 	}
 	return strconv.Itoa(n) + " " + noun + "s"
-}
-
-// assert refuses to start a stage unless the server says it has room. Asked
-// before every read, because headroom changes during a run; an unreadable
-// reading counts as unknown, never healthy.
-func assert(ctx context.Context, src Source, stage string) error {
-	health, err := src.Health(ctx, src.Conn())
-	if err != nil {
-		// Still a halt, but with the reason the server actually gave: an
-		// unreadable reading is unknown, and unknown is never healthy.
-		return err
-	}
-	return engine.Assert(health, stage)
 }

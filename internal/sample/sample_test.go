@@ -21,12 +21,26 @@ type fetcher struct {
 	err     error
 }
 
-func (f *fetcher) Sample(_ context.Context, _ engine.Conn, table engine.Table, n int) (catalog.Sample, error) {
+// Sample guards itself the way both real engines do: health first, and no
+// statement sent unless the server says it has room.
+func (f *fetcher) Sample(ctx context.Context, _ engine.Conn, table engine.Table,
+	n int) (catalog.Sample, error) {
+	if err := f.halt(ctx, "sample "+table.Key()); err != nil {
+		return catalog.Sample{}, err
+	}
 	f.asked = append(f.asked, table)
 	if f.err != nil {
 		return catalog.Sample{}, f.err
 	}
 	return catalog.Sample{Columns: table.Columns, Rows: f.rows}, nil
+}
+
+func (f *fetcher) halt(ctx context.Context, stage string) error {
+	health, err := f.Health(ctx, nil)
+	if err != nil {
+		return err
+	}
+	return engine.Assert(health, stage)
 }
 
 func (f *fetcher) Health(context.Context, engine.Conn) (engine.Health, error) {
@@ -269,7 +283,9 @@ func TestACappedRunSpendsItsBudgetOnValueDomains(t *testing.T) {
 }
 
 // Health is asked before every table, not once at startup, because headroom is
-// what changes during a run.
+// what changes during a run. A table that fails for its own reasons is skipped;
+// a server with no room halts the whole run instead of being skipped table by
+// table, so the distinction has to survive All's error handling.
 func TestSamplingHaltsWhenTheServerHasNoRoom(t *testing.T) {
 	entries := []catalog.Entry{table("Orders", 10, col("ID", "int"))}
 	reading := engine.Reading{MemoryVisible: true, AvailableGB: engine.MinAvailableGB - 1}
