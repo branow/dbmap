@@ -13,12 +13,16 @@ import (
 // budget is measured in.
 const CellChars = 200
 
-// Unbounded is the width a catalog renders for a column with no declared one.
-const Unbounded = "(max)"
-
 // Unsampleable lists lower-cased engine type names whose values a describer
-// cannot read. Long string types are deliberately absent: excluding them once
-// hid every lookup table's value domain.
+// cannot read. Only genuinely opaque values belong here: binary payloads,
+// spatial types, row versions.
+//
+// Long and unbounded string types are deliberately absent. Excluding them hid
+// every lookup table's value domain, which is the thing sampling exists to
+// capture - first by excluding `text`, and then, less visibly, by excluding
+// every column whose width renders as "(max)", which on SQL Server is the
+// ordinary spelling of a description column. Every cell is capped at
+// CellChars anyway, so unboundedness is not a reason to skip a column.
 var Unsampleable = []string{
 	"image",
 	"varbinary",
@@ -35,9 +39,6 @@ var Unsampleable = []string{
 // Sampleable reports whether a column's type permits reading its values; who
 // the value belongs to is redact's question, not this one.
 func Sampleable(column catalog.Column) bool {
-	if strings.EqualFold(column.Length, Unbounded) {
-		return false
-	}
 	name := strings.ToLower(strings.TrimSpace(column.Type))
 	for _, unsampleable := range Unsampleable {
 		if name == unsampleable {
