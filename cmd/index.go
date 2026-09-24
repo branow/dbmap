@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/spf13/cobra"
 
@@ -27,8 +28,11 @@ import (
 // project it describes, so the index travels with the checkout that needs it.
 const DefaultOut = ".dbmap"
 
-// Concurrency bounds how many model calls may be in flight. The describe stage
-// is sequential today, so this is a ceiling rather than a target.
+// Concurrency bounds how many model calls may be in flight, and how many
+// describe batches the build runs at once. Batches are independent and the
+// describe stage is the long pole of a run, so this is a target rather than
+// only a ceiling. Four is deliberately modest: the cap that matters is the
+// provider's rate limit, not this machine.
 const Concurrency = 4
 
 // indexOptions is the flag surface of `dbmap index`. --force is a persistent
@@ -145,9 +149,10 @@ func runIndex(ctx context.Context, f *cmdutil.Factory, connection string,
 		Limit:       opts.limit,
 		Samples:     opts.samples,
 		Model:       model,
+		Workers:     Concurrency,
 		Force:       f.Flags.Force,
 		DryRun:      opts.dryRun,
-		Logger:      progress{io: f.IO, quiet: f.Flags.Quiet},
+		Logger:      newProgress(f.IO, f.Flags.Quiet),
 	})
 	if err != nil {
 		return err
@@ -304,10 +309,20 @@ func cacheRoot() (string, error) {
 }
 
 // progress writes a build's stage lines to the error stream, keeping them out
-// of the document the output writer produces.
+// of the document the output writer produces - so `-o json` still pipes cleanly
+// while a person watching the terminal sees the work.
+//
+// The lock is not decoration: describe batches run concurrently, so this is
+// called from several goroutines at once, and an unsynchronised writer
+// interleaves half-lines on a terminal and races on a buffer in a test.
 type progress struct {
 	io    *iostreams.IOStreams
 	quiet bool
+	mu    *sync.Mutex
+}
+
+func newProgress(io *iostreams.IOStreams, quiet bool) progress {
+	return progress{io: io, quiet: quiet, mu: &sync.Mutex{}}
 }
 
 func (p progress) Info(message string) { p.write(message) }
@@ -318,6 +333,8 @@ func (p progress) write(message string) {
 	if p.quiet {
 		return
 	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	_, _ = p.io.ErrOut.Write([]byte(message + "\n"))
 }
 

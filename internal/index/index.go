@@ -43,7 +43,9 @@ type Options struct {
 	Force bool
 	// DryRun reports the plan and stops, writing and sending nothing.
 	DryRun bool
-	Logger Logger
+	// Workers is how many describe batches may be in flight. 0 means one.
+	Workers int
+	Logger  Logger
 }
 
 // sampleLimit maps the cap onto the sampler's convention, where zero means no
@@ -395,8 +397,9 @@ func describeAll(
 		})
 	}
 	return describe.All(ctx, client, inputs, describe.Options{
-		Model:  opts.Model,
-		Logger: opts.Logger,
+		Model:   opts.Model,
+		Workers: opts.Workers,
+		Logger:  opts.Logger,
 	})
 }
 
