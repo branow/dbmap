@@ -135,7 +135,7 @@ func runIndex(ctx context.Context, f *cmdutil.Factory, connection string,
 	if err != nil {
 		return err
 	}
-	client, model, err := describer(f, opts, cache)
+	client, model, spend, err := describer(f, opts, cache)
 	if err != nil {
 		return err
 	}
@@ -150,6 +150,7 @@ func runIndex(ctx context.Context, f *cmdutil.Factory, connection string,
 		Samples:     opts.samples,
 		Model:       model,
 		Workers:     Concurrency,
+		Spend:       spend,
 		Force:       f.Flags.Force,
 		DryRun:      opts.dryRun,
 		Logger:      newProgress(f.IO, f.Flags.Quiet),
@@ -237,22 +238,29 @@ func dbSecret(f *cmdutil.Factory, connection string,
 }
 
 // describer assembles the model client for this build behind the llm module's
-// own middleware: retry, a disk cache so a killed run resumes free, and a
-// concurrency ceiling. A dry run is the only build allowed to run without one.
-func describer(f *cmdutil.Factory, opts *indexOptions, cache string) (llm.Client, string, error) {
+// own middleware, and returns the total it meters into. A dry run is the only
+// build allowed to run without a client.
+//
+// The order of the wrappers is the whole point. The meter goes INNERMOST, so it
+// sees one call per request that actually reached the provider: retries count,
+// because a retried call is billed, and a response replayed from the disk cache
+// does not, because it was paid for on an earlier run. Metering outside the
+// cache is how a resumed build reports money it did not spend.
+func describer(f *cmdutil.Factory, opts *indexOptions,
+	cache string) (llm.Client, string, *llm.Usage, error) {
 	if opts.dryRun {
-		return nil, "", nil
+		return nil, "", nil, nil
 	}
 	named, entry, err := resolveBackend(f, opts.backend)
 	if err != nil {
-		return nil, "", err
+		return nil, "", nil, err
 	}
 
 	key := credentials.Secret{}
 	if config.NeedsAPIKey(entry.Provider) {
 		key, err = f.Store.Get(credentials.LLMKey(named))
 		if err != nil {
-			return nil, "", err
+			return nil, "", nil, err
 		}
 	}
 
@@ -263,12 +271,14 @@ func describer(f *cmdutil.Factory, opts *indexOptions, cache string) (llm.Client
 		APIKey:   key.Reveal(),
 	})
 	if err != nil {
-		return nil, "", err
+		return nil, "", nil, err
 	}
 
+	spend := &llm.Usage{}
+	client = llm.WithUsage(client, spend)
 	client = llm.WithRetry(client, llm.RetryConfig{})
 	client = llm.WithCache(client, filepath.Join(cache, "llm"))
-	return llm.WithConcurrency(client, Concurrency), entry.Model, nil
+	return llm.WithConcurrency(client, Concurrency), entry.Model, spend, nil
 }
 
 // resolveBackend answers which backend describes: --backend first, the active

@@ -149,7 +149,7 @@ func TestResolveBackend(t *testing.T) {
 func TestADryRunNeedsNoBackend(t *testing.T) {
 	h := newHarness(t)
 
-	client, model, err := describer(h.factory, &indexOptions{dryRun: true}, t.TempDir())
+	client, model, spend, err := describer(h.factory, &indexOptions{dryRun: true}, t.TempDir())
 
 	if err != nil {
 		t.Fatalf("describer: %v", err)
@@ -160,6 +160,9 @@ func TestADryRunNeedsNoBackend(t *testing.T) {
 	if model != "" {
 		t.Fatalf("model = %q, want none", model)
 	}
+	if spend != nil {
+		t.Fatalf("a dry run built a spend meter")
+	}
 }
 
 // A real build without a backend fails naming the fix, rather than quietly
@@ -167,7 +170,7 @@ func TestADryRunNeedsNoBackend(t *testing.T) {
 func TestABuildWithoutABackendSaysSo(t *testing.T) {
 	h := newHarness(t)
 
-	_, _, err := describer(h.factory, &indexOptions{}, t.TempDir())
+	_, _, _, err := describer(h.factory, &indexOptions{}, t.TempDir())
 
 	var missing *cmdutil.NotConfiguredError
 	if !errors.As(err, &missing) {
@@ -185,7 +188,7 @@ func TestDescriberComposesTheModuleMiddleware(t *testing.T) {
 		t.Fatalf("switching: %v", err)
 	}
 
-	client, model, err := describer(h.factory, &indexOptions{}, t.TempDir())
+	client, model, spend, err := describer(h.factory, &indexOptions{}, t.TempDir())
 
 	if err != nil {
 		t.Fatalf("describer: %v", err)
@@ -200,6 +203,11 @@ func TestDescriberComposesTheModuleMiddleware(t *testing.T) {
 	}
 	if model != "model-a" {
 		t.Fatalf("model = %q, want the backend's", model)
+	}
+	// The meter has to exist, or the build reports the usage its responses
+	// carried - which on a cache hit is what an earlier run paid, not this one.
+	if spend == nil {
+		t.Fatalf("no spend meter was built")
 	}
 }
 
