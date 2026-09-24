@@ -58,7 +58,7 @@ var Prompts = map[catalog.Kind]Prompt{
 		return join(append(parts,
 			"",
 			"Describe what this table holds, naming the grain — what one row is.",
-			"If it is a lookup of codes and their meanings, say so and set lookup=true.",
+			"If it is a lookup of codes and their meanings, say so.",
 			"Do not list the columns back; they are already indexed.",
 			verbFirst,
 			`Good: "Maps order status codes to their descriptions, one row per status."`,

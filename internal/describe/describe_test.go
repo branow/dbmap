@@ -339,15 +339,47 @@ func TestSynonymsAreNeverDescribed(t *testing.T) {
 	}
 }
 
-func TestLookupTablesAreRecorded(t *testing.T) {
-	f := &fake{replies: []any{reply{Objects: []answer{
-		{Name: "dbo.OrderStatuses", Sentence: "Maps order status codes to their descriptions.", Lookup: true},
-	}}}}
+// An answer is filed under the key that was ASKED about, never under the string
+// the model echoed back. Filing it under the model's spelling counted the
+// object as described while the object itself reported missing - both at once,
+// from the same batch.
+func TestAnswersAreFiledUnderTheKeyThatWasAsked(t *testing.T) {
+	cases := []struct {
+		name   string
+		answer string
+		want   string
+	}{
+		{"exact", "dbo.OrderStatuses", "dbo.OrderStatuses"},
+		{"different case", "DBO.ORDERSTATUSES", "dbo.OrderStatuses"},
+		{"schema dropped", "OrderStatuses", "dbo.OrderStatuses"},
+		{"never asked about", "dbo.SomethingElse", ""},
+	}
 
-	result, _ := All(context.Background(), f, []Input{input(catalog.Table, "OrderStatuses")}, Options{})
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			f := &fake{replies: []any{reply{Objects: []answer{
+				{Name: c.answer, Sentence: "Maps order status codes to their descriptions."},
+			}}}}
 
-	if !result.Lookups["dbo.OrderStatuses"] {
-		t.Fatal("a lookup table was not recorded as one")
+			result, _ := All(context.Background(), f,
+				[]Input{input(catalog.Table, "OrderStatuses")}, Options{})
+
+			if c.want == "" {
+				if len(result.Sentences) != 0 {
+					t.Fatalf("filed %v under a name never asked about", result.Sentences)
+				}
+				if len(result.Missing) != 1 {
+					t.Fatalf("Missing = %v, want the object that got no answer", result.Missing)
+				}
+				return
+			}
+			if result.Sentences[c.want] == "" {
+				t.Fatalf("no sentence under %q; got %v", c.want, result.Sentences)
+			}
+			if len(result.Missing) != 0 {
+				t.Fatalf("Missing = %v, want none", result.Missing)
+			}
+		})
 	}
 }
 
@@ -358,4 +390,17 @@ func contains(values []any, want string) bool {
 		}
 	}
 	return false
+}
+
+// Two tables answer "is this kind described": catalog.Kinds, which the pipeline
+// selects with, and Prompts, which decides whether a prompt exists at all. They
+// have to agree, or the pipeline hands an object to a stage with nothing to say
+// about it - or silently skips one the catalog promised a sentence for.
+func TestTheKindTablesAgreeOnWhatIsDescribed(t *testing.T) {
+	for _, spec := range catalog.Kinds {
+		if spec.Describe != Describable(spec.Kind) {
+			t.Errorf("%s: catalog says describe=%v, describe has a prompt=%v",
+				spec.Kind, spec.Describe, Describable(spec.Kind))
+		}
+	}
 }

@@ -380,7 +380,7 @@ func describeAll(
 	samples map[string]catalog.Sample,
 	opts Options,
 ) (describe.Result, error) {
-	empty := describe.Result{Sentences: map[string]string{}, Lookups: map[string]bool{}}
+	empty := describe.Result{Sentences: map[string]string{}}
 	if client == nil || len(todo) == 0 {
 		return empty, nil
 	}
