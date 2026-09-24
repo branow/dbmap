@@ -54,12 +54,19 @@ func Module(definition string) string { return Sum(Normalize(definition)) }
 
 // CanonicalTable is the exact text a table's fingerprint is taken over. Written
 // out line by line so adding a field to Structure cannot move the hash.
+//
+// Every column fact rendered into the index appears here. A fact the reader can
+// see but the hash cannot is a fact that changes the tree without ever earning
+// a fresh description.
 func CanonicalTable(object catalog.Object, structure catalog.Structure) string {
 	lines := make([]string, 0, len(structure.Columns)+len(structure.Indexes)+4)
 	for _, c := range structure.Columns {
 		line := "c " + c.Name + " " + c.Type + c.Length + " " + nullability(c.Nullable)
 		if c.Identity {
 			line += " id"
+		}
+		if c.Computed {
+			line += " gen"
 		}
 		lines = append(lines, line)
 	}
