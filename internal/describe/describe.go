@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/branow/dbmap/llm"
 )
@@ -14,6 +15,12 @@ const (
 	BatchChars = 40000
 	BatchMax   = 12
 )
+
+// DefaultWorkers is one: a library caller gets deterministic ordering unless it
+// asks for otherwise. The command sets this to its own concurrency ceiling,
+// because describing is the long pole of a build and every batch is
+// independent.
+const DefaultWorkers = 1
 
 // The field is `sentence`, never `description`, and its text is an ORDER, not
 // a noun phrase: models fill a `description` field with
@@ -100,6 +107,13 @@ func (o Options) max() int {
 	return o.Max
 }
 
+func (o Options) workers() int {
+	if o.Workers <= 0 {
+		return DefaultWorkers
+	}
+	return o.Workers
+}
+
 // Item is one object with its prompt already rendered.
 type Item struct {
 	Key    string
@@ -158,7 +172,9 @@ func BatchPrompt(items []Item) string {
 }
 
 // All describes every input it can, in batches. A failing batch is reported on
-// Result rather than aborting the run.
+// Result rather than aborting the run. Batches run opts.workers() at a time and
+// are merged back in batch order, so the result does not depend on which
+// finished first.
 func All(ctx context.Context, client llm.Client, inputs []Input, opts Options) (Result, error) {
 	result := Result{Sentences: map[string]string{}}
 
@@ -168,46 +184,20 @@ func All(ctx context.Context, client llm.Client, inputs []Input, opts Options) (
 	}
 	batches := Batch(items, opts.chars(), opts.max())
 
-	for i, batch := range batches {
-		response, err := client.Complete(ctx, llm.Request{
-			Prompt: BatchPrompt(batch),
-			Schema: Schema,
-			Model:  opts.Model,
-		})
-		if err != nil {
-			result.Failed = append(result.Failed, err)
-			warn(opts.Logger, fmt.Sprintf("describe: batch %d/%d failed: %v", i+1, len(batches), err))
+	outcomes := make([]outcome, len(batches))
+	run(len(batches), opts.workers(), func(i int) {
+		outcomes[i] = describeBatch(ctx, client, batches[i], i, len(batches), opts)
+	})
+
+	for _, got := range outcomes {
+		if got.err != nil {
+			result.Failed = append(result.Failed, got.err)
 			continue
 		}
-		result.Usage.Add(response.Usage)
-
-		var parsed reply
-		if err := json.Unmarshal(response.Structured, &parsed); err != nil {
-			result.Failed = append(result.Failed, err)
-			warn(opts.Logger, fmt.Sprintf("describe: batch %d/%d returned unreadable output: %v", i+1, len(batches), err))
-			continue
-		}
-
-		// Matched by name, never by position - and resolved against the keys
-		// this batch actually asked about, never trusted as written.
-		asked := requested(batch)
-		for _, a := range parsed.Objects {
-			sentence := strings.TrimSpace(a.Sentence)
-			if sentence == "" {
-				continue
-			}
-			key, ok := resolve(asked, a.Name)
-			if !ok {
-				// Filing the sentence under the name the model wrote would count
-				// it as described while the object it was asked about reports
-				// missing - both at once, from the same batch.
-				warn(opts.Logger, fmt.Sprintf("describe: batch %d/%d answered for %q, "+
-					"which it was not asked about", i+1, len(batches), a.Name))
-				continue
-			}
+		result.Usage.Add(got.usage)
+		for key, sentence := range got.sentences {
 			result.Sentences[key] = sentence
 		}
-		info(opts.Logger, fmt.Sprintf("describe: batch %d/%d (%d objects)", i+1, len(batches), len(batch)))
 	}
 
 	for _, item := range items {
@@ -219,6 +209,56 @@ func All(ctx context.Context, client llm.Client, inputs []Input, opts Options) (
 		warn(opts.Logger, "describe: no sentence for "+strings.Join(result.Missing, ", "))
 	}
 	return result, nil
+}
+
+// outcome is one batch's contribution, held aside until every batch is in so
+// the merge happens in batch order rather than completion order.
+type outcome struct {
+	sentences map[string]string
+	usage     llm.Usage
+	err       error
+}
+
+// describeBatch sends one batch and resolves its answers back onto the keys
+// that were asked for.
+func describeBatch(ctx context.Context, client llm.Client, batch []Item,
+	i, of int, opts Options) outcome {
+	response, err := client.Complete(ctx, llm.Request{
+		Prompt: BatchPrompt(batch),
+		Schema: Schema,
+		Model:  opts.Model,
+	})
+	if err != nil {
+		warn(opts.Logger, fmt.Sprintf("describe: batch %d/%d failed: %v", i+1, of, err))
+		return outcome{err: err}
+	}
+
+	var parsed reply
+	if err := json.Unmarshal(response.Structured, &parsed); err != nil {
+		warn(opts.Logger,
+			fmt.Sprintf("describe: batch %d/%d returned unreadable output: %v", i+1, of, err))
+		return outcome{err: err}
+	}
+
+	got := outcome{sentences: map[string]string{}, usage: response.Usage}
+	asked := requested(batch)
+	for _, a := range parsed.Objects {
+		sentence := strings.TrimSpace(a.Sentence)
+		if sentence == "" {
+			continue
+		}
+		key, ok := resolve(asked, a.Name)
+		if !ok {
+			// Filing the sentence under the name the model wrote would count it
+			// as described while the object it was asked about reports missing.
+			warn(opts.Logger, fmt.Sprintf("describe: batch %d/%d answered for %q, "+
+				"which it was not asked about", i+1, of, a.Name))
+			continue
+		}
+		got.sentences[key] = sentence
+	}
+	info(opts.Logger, fmt.Sprintf("describe: batch %d/%d (%d objects)", i+1, of, len(batch)))
+	return got
 }
 
 // requested indexes a batch's keys by their lower-cased spelling, so an answer
@@ -254,6 +294,36 @@ func resolve(asked map[string]string, name string) (string, bool) {
 		}
 	}
 	return found, found != ""
+}
+
+// run calls body for every index, workers at a time, and returns once all of
+// them have. One worker runs them in order on this goroutine.
+func run(n, workers int, body func(i int)) {
+	if workers <= 1 || n <= 1 {
+		for i := 0; i < n; i++ {
+			body(i)
+		}
+		return
+	}
+	if workers > n {
+		workers = n
+	}
+	next := make(chan int)
+	var wg sync.WaitGroup
+	for w := 0; w < workers; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := range next {
+				body(i)
+			}
+		}()
+	}
+	for i := 0; i < n; i++ {
+		next <- i
+	}
+	close(next)
+	wg.Wait()
 }
 
 func info(logger Logger, message string) {
