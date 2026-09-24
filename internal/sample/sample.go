@@ -6,6 +6,7 @@ package sample
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sort"
 	"strings"
 
@@ -24,8 +25,9 @@ type Fetcher interface {
 	Health(ctx context.Context, conn engine.Conn) (engine.Health, error)
 }
 
-// Logger reports what a run skipped.
+// Logger reports what a run is doing and what it skipped.
 type Logger interface {
+	Info(message string)
 	Warn(message string)
 }
 
@@ -102,7 +104,13 @@ func All(
 	}
 
 	samples := make(map[string]catalog.Sample, len(plans))
-	for _, plan := range plans {
+	for i, plan := range plans {
+		// Announced BEFORE the statement, not after: a progress line is worth
+		// having precisely when a read does not come back, and one printed on
+		// the way out names every table but the one that is stuck.
+		info(opts.Logger, fmt.Sprintf("sample: %d/%d %s (%s)",
+			i+1, len(plans), plan.Table.Key(), depth(plan, rows, opts.rows())))
+
 		got, err := fetcher.Sample(ctx, conn, plan.Table, opts.rows())
 		if err != nil {
 			if fatal(ctx, fetcher, conn, err) {
@@ -130,6 +138,23 @@ func fatal(ctx context.Context, fetcher Fetcher, conn engine.Conn, err error) bo
 	}
 	_, probe := fetcher.Health(ctx, conn)
 	return probe != nil
+}
+
+// depth says how much of a table this sample reads, which is the fact a reader
+// of the line wants: a whole small table is a value domain, 25 rows off a large
+// one is a shape.
+func depth(plan Plan, rows map[string]int64, n int) string {
+	total := rows[plan.Table.Key()]
+	if plan.Complete {
+		return fmt.Sprintf("%d rows, whole table", total)
+	}
+	return fmt.Sprintf("%d of %d rows", n, total)
+}
+
+func info(logger Logger, message string) {
+	if logger != nil {
+		logger.Info(message)
+	}
 }
 
 func warn(logger Logger, message string) {

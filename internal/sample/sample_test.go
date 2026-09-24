@@ -356,8 +356,35 @@ func TestAFailedTableIsLoggedAndSkipped(t *testing.T) {
 	if len(samples) != 0 {
 		t.Fatal("a failed sample produced a result")
 	}
-	if len(log.messages) == 0 {
+	if len(log.warnings) == 0 {
 		t.Fatal("a failed sample was skipped silently")
+	}
+}
+
+// A build can run for minutes with nothing on screen, so every table names
+// itself before it is read - and names how much of itself the sample takes,
+// since a whole small table is a value domain and 25 rows off a large one is a
+// shape.
+func TestEveryTableAnnouncesItselfBeforeItIsRead(t *testing.T) {
+	entries := []catalog.Entry{
+		table("OrderStatuses", 3, col("ID", "int")),
+		table("Orders", 900, col("ID", "int")),
+	}
+	log := &recorder{}
+	f := &fetcher{health: ok()}
+
+	if _, err := All(context.Background(), f, nil, entries, Options{Logger: log}); err != nil {
+		t.Fatalf("All: %v", err)
+	}
+
+	joined := strings.Join(log.messages, "\n")
+	for _, want := range []string{
+		"1/2 dbo.OrderStatuses (3 rows, whole table)",
+		"2/2 dbo.Orders (25 of 900 rows)",
+	} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("progress is missing %q:\n%s", want, joined)
+		}
 	}
 }
 
@@ -377,9 +404,14 @@ func TestOnlyTablesAreSampled(t *testing.T) {
 	}
 }
 
-type recorder struct{ messages []string }
+type recorder struct {
+	messages []string
+	warnings []string
+}
 
-func (r *recorder) Warn(message string) { r.messages = append(r.messages, message) }
+func (r *recorder) Info(message string) { r.messages = append(r.messages, message) }
+
+func (r *recorder) Warn(message string) { r.warnings = append(r.warnings, message) }
 
 func keys(plans []Plan) []string {
 	out := make([]string, len(plans))

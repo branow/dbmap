@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -183,6 +184,9 @@ func All(ctx context.Context, client llm.Client, inputs []Input, opts Options) (
 		return result, err
 	}
 	batches := Batch(items, opts.chars(), opts.max())
+	info(opts.Logger, fmt.Sprintf("describe: %s in %s, %s at a time",
+		plural(len(items), "object"), plural(len(batches), "batch"),
+		plural(opts.workers(), "batch")))
 
 	outcomes := make([]outcome, len(batches))
 	run(len(batches), opts.workers(), func(i int) {
@@ -242,6 +246,8 @@ func describeBatch(ctx context.Context, client llm.Client, batch []Item,
 
 	got := outcome{sentences: map[string]string{}, usage: response.Usage}
 	asked := requested(batch)
+	info(opts.Logger, fmt.Sprintf("describe: batch %d/%d answered (%d objects)",
+		i+1, of, len(batch)))
 	for _, a := range parsed.Objects {
 		sentence := strings.TrimSpace(a.Sentence)
 		if sentence == "" {
@@ -256,8 +262,8 @@ func describeBatch(ctx context.Context, client llm.Client, batch []Item,
 			continue
 		}
 		got.sentences[key] = sentence
+		info(opts.Logger, "describe: "+key+"  "+sentence)
 	}
-	info(opts.Logger, fmt.Sprintf("describe: batch %d/%d (%d objects)", i+1, of, len(batch)))
 	return got
 }
 
@@ -324,6 +330,17 @@ func run(n, workers int, body func(i int)) {
 	}
 	close(next)
 	wg.Wait()
+}
+
+// plural spells a count with its noun, so a log line reads as a sentence.
+func plural(n int, noun string) string {
+	if n == 1 {
+		return "1 " + noun
+	}
+	if strings.HasSuffix(noun, "ch") {
+		return strconv.Itoa(n) + " " + noun + "es"
+	}
+	return strconv.Itoa(n) + " " + noun + "s"
 }
 
 func info(logger Logger, message string) {

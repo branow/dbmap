@@ -144,6 +144,8 @@ func Build(ctx context.Context, src Source, client llm.Client, opts Options) (Su
 	summary.Reasons = reasons(selected, work.Reasons)
 	summary.Refetch = total(summary.Reasons)
 	summary.Untouched = len(selected) - summary.Refetch
+	info(opts.Logger, "plan: "+plural(summary.Refetch, "object")+" to refetch, "+
+		plural(summary.Untouched, "object")+" the modify signal proves untouched")
 
 	if opts.DryRun {
 		return summary, nil
@@ -191,6 +193,11 @@ func Build(ctx context.Context, src Source, client llm.Client, opts Options) (Su
 	summary.Catalogs = written.Catalogs
 	summary.ColumnFiles = written.ColumnFiles
 	summary.BodyFiles = written.BodyFiles
+	for _, file := range written.Catalogs {
+		info(opts.Logger, "write: "+file.File+" ("+plural(file.Rows, "row")+")")
+	}
+	info(opts.Logger, "write: "+plural(written.ColumnFiles, "column file")+", "+
+		plural(written.BodyFiles, "body file")+" under "+dir)
 	return summary, nil
 }
 
@@ -303,7 +310,8 @@ func fetch(
 		plural(summary.Reused, "object")+" from the cache")
 
 	if len(missing) > 0 {
-		if err := pull(ctx, src, cached, missing, structures, definitions, summary); err != nil {
+		if err := pull(ctx, src, cached, missing, structures, definitions,
+			summary, opts.Logger); err != nil {
 			return nil, err
 		}
 	}
@@ -329,7 +337,9 @@ func pull(
 	structures map[string]catalog.Structure,
 	definitions map[string]string,
 	summary *Summary,
+	logger Logger,
 ) error {
+	info(logger, "fetch: structure for "+plural(len(missing), "object"))
 	fresh, err := src.Structure(ctx, src.Conn())
 	if err != nil {
 		return err
@@ -344,6 +354,7 @@ func pull(
 
 	bodies := map[string]redact.Body{}
 	if len(keys) > 0 {
+		info(logger, "fetch: bodies for "+plural(len(keys), "object"))
 		bodies, err = src.Modules(ctx, src.Conn(), keys)
 		if err != nil {
 			return err
@@ -354,6 +365,9 @@ func pull(
 		key := object.Key()
 		structure := fresh[key]
 		structures[key] = structure
+		// An object absent from the fetch is an empty structure, not a failure:
+		// a procedure has no columns and an engine may simply omit it. Refusing
+		// to cache that would refetch it on every run for ever.
 		cached.putStructure(key, object.Modified, structure)
 
 		body, ok := bodies[key]
