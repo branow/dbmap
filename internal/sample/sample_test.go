@@ -98,7 +98,6 @@ func TestATableOfOnlyPIIIsNeverQueried(t *testing.T) {
 
 func TestOpaqueColumnsAreExcluded(t *testing.T) {
 	cases := []catalog.Column{
-		{Name: "Body", Type: "varchar", Length: "(max)"},
 		{Name: "Blob", Type: "varbinary"},
 		{Name: "Payload", Type: "bytea"},
 		{Name: "Picture", Type: "image"},
@@ -119,6 +118,23 @@ func TestOpaqueColumnsAreExcluded(t *testing.T) {
 				t.Fatalf("not recorded as unsampleable: %+v", plan.Withheld)
 			}
 		})
+	}
+}
+
+// The same regression as the `text` one, on the other engine. An unbounded
+// width is how SQL Server spells its ordinary string type, so withholding
+// "(max)" hid exactly the value domains sampling exists to capture - a status
+// lookup would project its integer key and nothing else. Every cell is capped
+// anyway, so unboundedness is not a reason to skip a column.
+func TestAnUnboundedWidthIsStillSampled(t *testing.T) {
+	body := catalog.Column{Name: "Label", Type: "nvarchar", Length: "(max)"}
+	plan := Project(table("OrderStatuses", 3, col("ID", "int"), body))
+
+	if len(plan.Withheld) != 0 {
+		t.Fatalf("withheld an ordinary string column: %+v", plan.Withheld)
+	}
+	if len(plan.Table.Columns) != 2 || plan.Table.Columns[1] != "Label" {
+		t.Fatalf("projected %v, want the label column read", plan.Table.Columns)
 	}
 }
 
