@@ -3,6 +3,7 @@ package connect
 import (
 	"errors"
 	"io/fs"
+	"net/url"
 	"os"
 	"strings"
 	"testing"
@@ -222,10 +223,51 @@ func TestPostgresDSNIsBuiltFromTheRecord(t *testing.T) {
 	}
 
 	for _, want := range []string{"postgres://", "db.example.internal:6543", "/appcore",
-		"sslmode=require", "application_name=dbmap"} {
+		"sslmode=verify-full", "application_name=dbmap"} {
 		if !strings.Contains(source.String(), want) {
 			t.Errorf("DSN is missing %s: %s", want, source)
 		}
+	}
+}
+
+// Encryption that verifies nobody encrypts the traffic to whoever answered, so
+// the certificate is checked unless the connection record says not to. Both
+// engines spell the same choice, and both spell it the same way round.
+func TestTheServerCertificateIsVerifiedUnlessTheRecordSaysOtherwise(t *testing.T) {
+	cases := []struct {
+		name      string
+		trust     bool
+		sqlserver string
+		postgres  string
+	}{
+		{"default", false, "TrustServerCertificate=false", "sslmode=verify-full"},
+		{"trusted", true, "TrustServerCertificate=true", "sslmode=require"},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			ms := sqlLogin()
+			ms.TrustCert = c.trust
+			source, err := sqlserverDSN(ms, secret, world(nil, nil))
+			if err != nil {
+				t.Fatalf("sqlserverDSN: %v", err)
+			}
+			if !strings.Contains(source.String(), url.QueryEscape(c.sqlserver)) &&
+				!strings.Contains(source.String(), c.sqlserver) {
+				t.Errorf("DSN is missing %s: %s", c.sqlserver, source)
+			}
+
+			pg := config.Connection{Engine: config.Postgres, Host: "db.example.internal",
+				Database: "appcore", Auth: config.SCRAM, Username: "reader",
+				TrustCert: c.trust}
+			source, err = postgresDSN(pg, secret, world(nil, nil))
+			if err != nil {
+				t.Fatalf("postgresDSN: %v", err)
+			}
+			if !strings.Contains(source.String(), c.postgres) {
+				t.Errorf("DSN is missing %s: %s", c.postgres, source)
+			}
+		})
 	}
 }
 

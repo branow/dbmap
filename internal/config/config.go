@@ -49,6 +49,15 @@ type Connection struct {
 	Database string `yaml:"database,omitempty"`
 	Auth     Auth   `yaml:"auth"`
 	Username string `yaml:"username,omitempty"`
+	// TrustCert accepts the server's TLS certificate without verifying it.
+	//
+	// Off by default: encryption that verifies nobody encrypts the traffic to
+	// whoever answered. It is a per-connection setting rather than a global one
+	// because the case it exists for - a server whose certificate is issued by
+	// an internal authority this machine does not trust - is a property of that
+	// server, and the alternative users reach for otherwise is turning
+	// encryption off entirely.
+	TrustCert bool `yaml:"trust_server_certificate,omitempty"`
 	// Params are extra driver parameters, passed through untouched.
 	Params map[string]string `yaml:"params,omitempty"`
 }

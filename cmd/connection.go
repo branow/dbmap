@@ -18,7 +18,11 @@ func newConnection(f *cmdutil.Factory) *cobra.Command {
 		Use:   "connection",
 		Short: "Manage named database connections",
 		Long: "A connection holds non-secret settings only. Its password lives in " +
-			"the OS keychain under db:<name> and never enters the config file.",
+			"the OS keychain under db:<name> and never enters the config file.\n\n" +
+			"TLS is always on and the server's certificate is verified. A server " +
+			"whose certificate comes from an internal authority this machine does " +
+			"not trust needs --trust-server-certificate, which encrypts without " +
+			"proving who answered.",
 	}
 	cmd.AddCommand(
 		newConnectionAdd(f),
@@ -32,15 +36,16 @@ func newConnection(f *cmdutil.Factory) *cobra.Command {
 // connectionOptions is the flag surface of `connection add`. Every value is a
 // flag so a CI run needs no terminal, and every one is prompted for otherwise.
 type connectionOptions struct {
-	engine   string
-	host     string
-	port     int
-	database string
-	auth     string
-	username string
-	params   map[string]string
-	stdin    bool
-	noVerify bool
+	engine    string
+	host      string
+	port      int
+	database  string
+	auth      string
+	username  string
+	trustCert bool
+	params    map[string]string
+	stdin     bool
+	noVerify  bool
 }
 
 func newConnectionAdd(f *cmdutil.Factory) *cobra.Command {
@@ -60,6 +65,8 @@ func newConnectionAdd(f *cmdutil.Factory) *cobra.Command {
 	flags.StringVar(&opts.database, "database", "", "default database")
 	flags.StringVar(&opts.auth, "auth", "", "authentication mode")
 	flags.StringVar(&opts.username, "username", "", "login name")
+	flags.BoolVar(&opts.trustCert, "trust-server-certificate", false,
+		"accept the server's TLS certificate without verifying it")
 	flags.StringToStringVar(&opts.params, "param", nil, "extra driver parameter, repeatable")
 	flags.BoolVar(&opts.stdin, "password-stdin", false, "read the password from stdin")
 	flags.BoolVar(&opts.noVerify, "no-verify", false, "store without probing the connection")
@@ -98,13 +105,14 @@ func addConnection(c *cobra.Command, f *cmdutil.Factory, name string,
 	}
 
 	entry := config.Connection{
-		Engine:   engine,
-		Host:     opts.host,
-		Port:     opts.port,
-		Database: opts.database,
-		Auth:     auth,
-		Username: opts.username,
-		Params:   opts.params,
+		Engine:    engine,
+		Host:      opts.host,
+		Port:      opts.port,
+		Database:  opts.database,
+		Auth:      auth,
+		Username:  opts.username,
+		TrustCert: opts.trustCert,
+		Params:    opts.params,
 	}
 	key := credentials.DBKey(name)
 	secret, from, err := readSecret(f, opts.stdin, key, "password", "--password-stdin",
@@ -171,6 +179,7 @@ func newConnectionShow(f *cmdutil.Factory) *cobra.Command {
 				{Name: "database", Value: entry.Database},
 				{Name: "auth", Value: string(entry.Auth)},
 				{Name: "username", Value: entry.Username},
+				{Name: "verify certificate", Value: !entry.TrustCert},
 				{Name: "params", Value: entry.Params},
 			})
 		},

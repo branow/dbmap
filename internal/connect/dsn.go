@@ -32,9 +32,10 @@ func sqlserverDSN(cfg config.Connection, secret string, env environment) (dsn, e
 	query := url.Values{}
 	query.Set("app name", Application)
 	query.Set("encrypt", "true")
-	// Encryption is always on; verifying the chain is opt-in through params,
-	// because an internal certificate authority is the norm here.
-	query.Set("TrustServerCertificate", "true")
+	// Encryption is always on, and the chain is verified unless the connection
+	// says not to. Trusting any certificate encrypts the traffic to whoever
+	// answered, which is not what a reader of "encrypt=true" assumes.
+	query.Set("TrustServerCertificate", strconv.FormatBool(cfg.TrustCert))
 	query.Set("connection timeout", strconv.Itoa(LoginTimeout))
 	query.Set("dial timeout", strconv.Itoa(DialTimeout))
 	if cfg.Database != "" {
@@ -72,12 +73,11 @@ func sqlserverDSN(cfg config.Connection, secret string, env environment) (dsn, e
 	}).String()), nil
 }
 
-// postgresDSN builds a Postgres data source name. sslmode=require encrypts
-// without demanding a verifiable chain; params.sslmode can ask for verify-full.
+// postgresDSN builds a Postgres data source name.
 func postgresDSN(cfg config.Connection, secret string, env environment) (dsn, error) {
 	query := url.Values{}
 	query.Set("application_name", Application)
-	query.Set("sslmode", "require")
+	query.Set("sslmode", sslMode(cfg))
 	query.Set("connect_timeout", strconv.Itoa(LoginTimeout))
 
 	for key, value := range cfg.Params {
@@ -112,6 +112,16 @@ func postgresDSN(cfg config.Connection, secret string, env environment) (dsn, er
 		Path:     "/" + cfg.Database,
 		RawQuery: query.Encode(),
 	}).String()), nil
+}
+
+// sslMode is the Postgres spelling of the same choice TrustServerCertificate
+// makes on SQL Server: verify-full checks the chain and the host name, require
+// only encrypts. params.sslmode still overrides either.
+func sslMode(cfg config.Connection) string {
+	if cfg.TrustCert {
+		return "require"
+	}
+	return "verify-full"
 }
 
 // hostPort renders the address, defaulting the port.
