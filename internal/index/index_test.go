@@ -173,8 +173,14 @@ func TestDryRunSendsNothingBeyondTheManifest(t *testing.T) {
 	if summary.Objects != len(source.objects) {
 		t.Fatalf("Objects = %d, want %d", summary.Objects, len(source.objects))
 	}
-	if summary.Fetched != len(source.objects) {
-		t.Fatalf("Fetched = %d, want every object planned", summary.Fetched)
+	// A dry run consults no cache, so it reports neither fetched nor reused:
+	// what it knows is what the modify signal says must be re-read.
+	if summary.Refetch != len(source.objects) {
+		t.Fatalf("Refetch = %d, want every object planned", summary.Refetch)
+	}
+	if summary.Fetched != 0 || summary.Reused != 0 {
+		t.Fatalf("Fetched = %d, Reused = %d, want a dry run to claim neither",
+			summary.Fetched, summary.Reused)
 	}
 	if _, err := os.Stat(filepath.Join(opts.Out, opts.Environment)); !os.IsNotExist(err) {
 		t.Fatalf("a dry run wrote an index tree: %v", err)
