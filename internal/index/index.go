@@ -45,7 +45,12 @@ type Options struct {
 	DryRun bool
 	// Workers is how many describe batches may be in flight. 0 means one.
 	Workers int
-	Logger  Logger
+	// Spend accumulates what the model calls of this run actually cost. The
+	// usage carried on a response is replayed from the model cache on a hit, so
+	// a resumed run would otherwise report money it did not spend. Nil means
+	// report what the responses carried.
+	Spend  *llm.Usage
+	Logger Logger
 }
 
 // sampleLimit maps the cap onto the sampler's convention, where zero means no
@@ -167,6 +172,9 @@ func Build(ctx context.Context, src Source, client llm.Client, opts Options) (Su
 	summary.Missing = result.Missing
 	summary.Failed = result.Failed
 	summary.Usage = result.Usage
+	if opts.Spend != nil {
+		summary.Usage = *opts.Spend
+	}
 
 	written, err := write(dir, selected, split, result, state, work.Dropped)
 	if err != nil {
