@@ -168,8 +168,16 @@ func runIndex(ctx context.Context, f *cmdutil.Factory, connection string,
 // still written — a partial index beats none — but a tree whose description
 // column is empty is not a success, and reporting one to CI is how a broken
 // backend goes unnoticed for a week.
+//
+// A failed batch is not the only way to get there. A backend that answers every
+// call and names nothing it was asked about leaves the same empty column with
+// no failure to show for it, so objects left without a sentence fail the run on
+// their own.
 func describeOutcome(summary index.Summary) error {
-	if summary.DryRun || len(summary.Failed) == 0 {
+	if summary.DryRun {
+		return nil
+	}
+	if len(summary.Failed) == 0 && len(summary.Missing) == 0 {
 		return nil
 	}
 	return &cmdutil.UnavailableError{
