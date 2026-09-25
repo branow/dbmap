@@ -87,6 +87,17 @@ var signatures = []struct {
 		Error: func(string) error { return &RejectedError{Subject: "the database"} },
 	},
 	{
+		// dbmap verifies the chain by default, so this is the likeliest first
+		// failure against an internal certificate authority - and the driver
+		// names the mechanism, never the flag that settles it.
+		Name: "certificate-not-verified",
+		Match: regexp.MustCompile(`(?i)x509: |certificate signed by unknown authority|` +
+			`certificate is not trusted|certificate has expired|` +
+			`certificate is valid for .* not |unable to verify|` +
+			`SSL certificate|self[- ]signed certificate`),
+		Error: func(host string) error { return &CertificateError{Host: host} },
+	},
+	{
 		Name:  "no-ticket",
 		Match: regexp.MustCompile(`(?i)no credentials? cache|credentials cache file .* not found`),
 		Error: func(string) error {

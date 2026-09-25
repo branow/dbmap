@@ -207,3 +207,15 @@ func TestEveryRuleUsesADocumentedCode(t *testing.T) {
 		}
 	}
 }
+
+// A certificate this machine will not verify is the settings dbmap was given,
+// not a credential the server rejected, so it exits validation rather than
+// auth - and a rejected login must keep exiting auth beside it.
+func TestACertificateFailureExitsValidation(t *testing.T) {
+	if code := ExitCode(&connect.CertificateError{Host: "db.example.internal"}); code != ExitValidation {
+		t.Errorf("certificate: exit code = %d, want %d", code, ExitValidation)
+	}
+	if code := ExitCode(&connect.RejectedError{Subject: "the login"}); code != ExitAuth {
+		t.Errorf("rejected login: exit code = %d, want %d", code, ExitAuth)
+	}
+}
