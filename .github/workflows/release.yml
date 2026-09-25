@@ -1,0 +1,52 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+# The release itself is created in this repository; the tap and bucket live
+# elsewhere and are pushed to with TAP_GITHUB_TOKEN, not with this one.
+permissions:
+  contents: write
+
+jobs:
+  # One macOS runner builds everything. The darwin artifacts are cgo builds -
+  # the keychain backend calls the Security framework directly - so they cannot
+  # be produced anywhere else; linux and windows are CGO_ENABLED=0 in
+  # .goreleaser.yml and cross-compile from here without help.
+  release:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # goreleaser reads tags and history to build the changelog, which a
+          # shallow clone does not carry.
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # A tag is not a promise that the commit was ever tested: a tag can be
+      # pushed at any commit, including one that never saw CI. Prove it here
+      # before publishing binaries under its name.
+      - run: go build ./...
+      - run: go vet ./...
+      - run: go test ./...
+
+      - name: test the llm module
+        working-directory: llm
+        run: go test ./...
+
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Absent, goreleaser fails the whole release at the publish step,
+          # after the binaries are already built. The check job on every push
+          # catches a broken config; only a missing secret can get this far.
+          TAP_GITHUB_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
