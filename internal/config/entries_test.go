@@ -2,7 +2,11 @@ package config
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
+	"regexp"
+	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -168,14 +172,39 @@ func TestSavedFileIsOwnerOnlyAndHoldsNoSecret(t *testing.T) {
 	if err := c.Save(); err != nil {
 		t.Fatal(err)
 	}
-	info, err := stat(path)
+	// Windows reports 0666 for any writable file whatever mode was passed, so
+	// the mode check cannot run there; the ACL on the profile directory is what
+	// protects it. The content check below runs everywhere, and on Windows it is
+	// the whole of this test.
+	if runtime.GOOS != "windows" {
+		info, err := stat(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if perm := info.Mode().Perm(); perm != 0o600 {
+			t.Errorf("permissions = %o, want 600", perm)
+		}
+	}
+
+	raw, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if perm := info.Mode().Perm(); perm != 0o600 {
-		t.Errorf("permissions = %o, want 600", perm)
+	if !strings.Contains(string(raw), "username: reader") {
+		t.Errorf("the connection was not saved:\n%s", raw)
+	}
+	// No secret field exists on any config struct, so this fails only if one is
+	// added - which is the mistake worth catching. `secrets:` is allowed: that
+	// stanza holds the storage POLICY, never a value.
+	if secretish.MatchString(string(raw)) {
+		t.Errorf("a credential-shaped key reached the config file:\n%s", raw)
 	}
 }
+
+// secretish matches the keys that would mean a secret had been given a home in
+// the file. Deliberately not `secret`, which would hit the policy stanza.
+var secretish = regexp.MustCompile(`(?i)\b(password|passwd|pwd|api[_-]?key|apikey|` +
+	`access[_-]?token|client[_-]?secret)\b`)
 
 func TestLoadOfAMissingFileIsEmpty(t *testing.T) {
 	c, err := LoadFrom(filepath.Join(t.TempDir(), "absent.yml"))

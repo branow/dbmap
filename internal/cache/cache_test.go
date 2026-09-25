@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -239,7 +240,16 @@ func TestInterruptedWriteLeavesNothingReadable(t *testing.T) {
 	}
 }
 
+// The cache holds redacted procedure bodies, which are the user's schema: owner
+// only. Skipped on Windows, which cannot express that mode - Go synthesises
+// Mode().Perm() from one read-only attribute and reports 0666 for any writable
+// file whatever mode was passed (os/types_windows.go). There the file is
+// protected by the ACL inherited from the user's cache directory instead, which
+// a mode check cannot see.
 func TestCacheFilesAreNotWorldReadable(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("windows has no unix mode bits; the profile ACL protects the file")
+	}
 	s := scope(t)
 	if err := s.PutManifest(Manifest{Environment: "dev"}); err != nil {
 		t.Fatalf("PutManifest: %v", err)
