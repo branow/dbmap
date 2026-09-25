@@ -48,6 +48,24 @@ jobs:
       - run: CGO_ENABLED=1 go build ./...
       - run: CGO_ENABLED=1 go test ./internal/credentials/...
 
+  # A broken .goreleaser.yml otherwise surfaces for the first time when a tag is
+  # pushed, which is the worst moment to find out.
+  goreleaser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: check
+
   cross:
     runs-on: ubuntu-latest
     strategy:
