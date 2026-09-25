@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -193,12 +194,19 @@ func TestFileStore(t *testing.T) {
 	if err != nil || secret.Reveal() != password {
 		t.Fatalf("secret = %v, err = %v", secret, err)
 	}
-	info, err := os.Stat(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if perm := info.Mode().Perm(); perm != 0o600 {
-		t.Errorf("permissions = %o, want 600", perm)
+	// This file holds a database password in plaintext, so the mode is the point
+	// of it. Windows cannot report it - Mode().Perm() is synthesised from one
+	// read-only attribute and reads 0666 for any writable file - so the check is
+	// Unix-only; there the profile directory's ACL is what restricts it. The
+	// round trip either side of this runs on every platform.
+	if runtime.GOOS != "windows" {
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if perm := info.Mode().Perm(); perm != 0o600 {
+			t.Errorf("permissions = %o, want 600", perm)
+		}
 	}
 	if err := store.Delete(DBKey("primary")); err != nil {
 		t.Fatal(err)
