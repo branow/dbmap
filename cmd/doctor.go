@@ -248,6 +248,11 @@ func advise(f *cmdutil.Factory, err error) {
 		fmt.Fprintf(f.IO.ErrOut, "remedy: %s\n", cache.Remedy())
 		return
 	}
+	var cert *connect.CertificateError
+	if errors.As(err, &cert) {
+		fmt.Fprintf(f.IO.ErrOut, "remedy: %s\n", cert.Remedy())
+		return
+	}
 	var cross *connect.CrossRealmError
 	if errors.As(err, &cross) {
 		fmt.Fprintf(f.IO.ErrOut, "remedy: %s\n", cross.Remedy())

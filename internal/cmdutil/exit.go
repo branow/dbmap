@@ -67,6 +67,9 @@ var rules = []struct {
 	{ExitValidation, as[*config.InUseError]},
 	{ExitValidation, as[*output.UnknownFormatError]},
 	{ExitValidation, as[*connect.UnsupportedError]},
+	// A server this tool will not open on the settings it was given, which is
+	// the user's decision to make, not a credential that was rejected.
+	{ExitValidation, as[*connect.CertificateError]},
 
 	{ExitAuth, as[*AuthError]},
 	{ExitAuth, as[*connect.RejectedError]},

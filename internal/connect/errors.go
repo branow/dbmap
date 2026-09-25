@@ -48,6 +48,32 @@ func (e *CredentialCacheError) Remedy() string {
 
 func (e *CredentialCacheError) Unwrap() error { return e.Err }
 
+// CertificateError reports a server whose TLS certificate this machine will not
+// verify. It is named rather than passed through because the driver's own words
+// ("x509: certificate signed by unknown authority") describe the mechanism and
+// not the decision: dbmap verifies by default, and an internal certificate
+// authority the machine does not trust is the ordinary reason it fails. Without
+// this the first error a new user meets names no way out.
+type CertificateError struct {
+	Host string
+	Err  error
+}
+
+func (e *CertificateError) Error() string {
+	return fmt.Sprintf("the server at %s presented a certificate this machine will not "+
+		"verify; %s", e.Host, e.Remedy())
+}
+
+// Remedy is the choice the user actually has: prove the server, or say they
+// accept not proving it. Turning encryption off is deliberately not offered.
+func (e *CertificateError) Remedy() string {
+	return "either install the issuing authority's certificate in this machine's trust " +
+		"store, or redefine the connection with --trust-server-certificate to encrypt " +
+		"without verifying who answered"
+}
+
+func (e *CertificateError) Unwrap() error { return e.Err }
+
 // UnsupportedError reports a configuration this build cannot serve, named
 // precisely rather than surfaced as the driver's generic authentication failure.
 type UnsupportedError struct {
