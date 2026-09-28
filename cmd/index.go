@@ -147,6 +147,7 @@ func runIndex(ctx context.Context, f *cmdutil.Factory, connection string,
 	summary, err := index.Build(ctx, source, client, index.Options{
 		Environment: connection,
 		Database:    database,
+		Engine:      string(entry.Engine),
 		Out:         opts.out,
 		Cache:       cache,
 		Match:       opts.match,

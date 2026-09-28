@@ -568,3 +568,39 @@ func read(t *testing.T, path string) string {
 	}
 	return string(content)
 }
+
+// A reader opens the tree with no dbmap, no connection and nobody to ask what
+// is in it. The roster and the guide at the root are the whole answer, so a
+// build that wrote the catalogs but not those left a tree that cannot be found
+// its way around.
+func TestABuildLeavesTheTreeAbleToDescribeItself(t *testing.T) {
+	source, client, opts := table(), &model{}, options(t)
+	client.source = source
+	opts.Engine = "sqlserver"
+
+	mustBuild(t, source, client, opts)
+
+	roster, err := os.ReadFile(filepath.Join(opts.Out, "databases.tsv"))
+	if err != nil {
+		t.Fatalf("reading the roster: %v", err)
+	}
+	if !strings.Contains(string(roster), "stage\tAppCore\tsqlserver\t") {
+		t.Errorf("roster does not name this build:\n%s", roster)
+	}
+	if _, err := os.Stat(filepath.Join(opts.Out, "README.md")); err != nil {
+		t.Errorf("no reader's guide at the index root: %v", err)
+	}
+}
+
+// A dry run sends nothing and writes nothing. Stamping the roster would report
+// a build that never happened, and the staleness reminder reads that stamp.
+func TestADryRunWritesNoRoster(t *testing.T) {
+	source, opts := table(), options(t)
+	opts.DryRun = true
+
+	mustBuild(t, source, nil, opts)
+
+	if _, err := os.Stat(filepath.Join(opts.Out, "databases.tsv")); !os.IsNotExist(err) {
+		t.Errorf("a dry run wrote a roster")
+	}
+}

@@ -25,6 +25,9 @@ type Options struct {
 	// Environment scopes both the index tree and the fetch cache.
 	Environment string
 	Database    string
+	// Engine names the database engine, for the tree's roster. The build does
+	// not branch on it; the source it was opened from already has.
+	Engine string
 	// Out is the index root; this build lands in <Out>/<Environment>/<Database>.
 	Out string
 	// Cache is the fetch cache root, or empty for a build that caches nothing.
@@ -198,7 +201,31 @@ func Build(ctx context.Context, src Source, client llm.Client, opts Options) (Su
 	}
 	info(opts.Logger, "write: "+plural(written.ColumnFiles, "column file")+", "+
 		plural(written.BodyFiles, "body file")+" under "+dir)
+
+	if err := describeTree(opts, written.Catalogs); err != nil {
+		return summary, err
+	}
 	return summary, nil
+}
+
+// describeTree updates what the tree says about itself: the roster row for the
+// database this build wrote, and the reader's guide beside it. Both live at the
+// index root rather than in a database's directory, because the reader opens
+// the root with nothing - no dbmap, no connection, and no one to tell them what
+// the tree holds.
+func describeTree(opts Options, catalogs []render.Written) error {
+	if err := render.WriteRoster(opts.Out, render.Roster{
+		Connection: opts.Environment,
+		Database:   opts.Database,
+		Engine:     opts.Engine,
+		Catalogs:   catalogs,
+		Built:      time.Now(),
+	}); err != nil {
+		return err
+	}
+	info(opts.Logger, "write: "+render.RosterFile+" and "+render.GuideFile+
+		" under "+opts.Out)
+	return render.WriteGuide(opts.Out)
 }
 
 // manifest reads the catalog query every later stage versions against, and

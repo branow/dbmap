@@ -61,6 +61,25 @@ from the declared ones would be misleadingly sparse. Inferring join candidates
 from column names instead was considered and rejected as guesses dressed as
 data.
 
+The tree describes itself. At the index root, beside the per-database
+directories, a build writes `databases.tsv` — one row per database, with its
+engine, its object counts and the time it was built — and `README.md`, the
+layout addressed to whoever reads the tree.
+
+Those two files exist because **the reader is not the builder**. Building needs
+the binary, a connection and a credential; reading needs none of them, and the
+whole point of writing plain text is that anyone who can open a file can use the
+result. A reader who arrives with a clone and nothing else has no way to ask
+what was indexed, how old it is, or what the columns mean — so the tree answers
+all three itself rather than depending on a tool, a config file, or a wiki page
+that will not be there.
+
+The roster merges for the same reason the catalogs do: each database is built by
+its own run, often days apart, so a build that rewrote the whole file would
+erase the counts and the stamp of every database it did not touch. A dry run
+writes neither file, because stamping a build that never happened is worse than
+having no stamp at all.
+
 ## Staleness: two tiers
 
 The central idea. Two signals guard two different costs.

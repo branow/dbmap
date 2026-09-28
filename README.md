@@ -23,15 +23,22 @@ actually changed.
 ## What it produces
 
 ```
-.dbmap/<connection>/<database>/
-  tables.tsv        name, rows, size, triggers, columns, modified, fingerprint, description
-  views.tsv
-  procedures.tsv    parameters inline
-  functions.tsv     return type and parameters inline
-  synonyms.tsv
-  columns/<schema>.<name>.tsv   one per table and view: every column, key, index
-  bodies/<schema>.<name>.sql    one per view, procedure and function
+.dbmap/
+  databases.tsv     one row per database: engine, object counts, when it was built
+  README.md         the layout, for whoever reads the tree
+  <connection>/<database>/
+    tables.tsv      name, rows, size, triggers, columns, modified, fingerprint, description
+    views.tsv
+    procedures.tsv  parameters inline
+    functions.tsv   return type and parameters inline
+    synonyms.tsv
+    columns/<schema>.<name>.tsv  one per table and view: every column, key, index
+    bodies/<schema>.<name>.sql   one per view, procedure and function
 ```
+
+The two files at the root are what let a tree be read by someone who never
+installs `dbmap`: `databases.tsv` says what is indexed and how old it is, and
+`README.md` says how to read it.
 
 `tables.tsv`:
 
