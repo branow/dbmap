@@ -4,10 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/branow/dbmap/llm"
@@ -49,27 +52,112 @@ func (s stubbed) stdin(t *testing.T) string {
 	return string(data)
 }
 
+const (
+	stubDirEnv  = "DBMAP_CLAUDECODE_STUB_DIR"
+	stubExitEnv = "DBMAP_CLAUDECODE_STUB_EXIT"
+)
+
+// TestMain runs the tests - unless this binary was copied onto PATH as `claude`
+// and invoked as the stub, which is what stubDirEnv being set means. Then it
+// records the call and replays the canned answer instead.
+func TestMain(m *testing.M) {
+	if dir := os.Getenv(stubDirEnv); dir != "" {
+		os.Exit(runStub(dir))
+	}
+	code := m.Run()
+	if stubBinDir != "" {
+		os.RemoveAll(stubBinDir)
+	}
+	os.Exit(code)
+}
+
+// runStub is the stub itself: record the argv and stdin it was given, print
+// what the test staged, and exit with the code the test asked for.
+func runStub(dir string) int {
+	var args string
+	if len(os.Args) > 1 {
+		args = strings.Join(os.Args[1:], "\n") + "\n"
+	}
+	if err := os.WriteFile(filepath.Join(dir, "args"), []byte(args), 0o600); err != nil {
+		return 1
+	}
+	in, err := io.ReadAll(os.Stdin)
+	if err != nil {
+		return 1
+	}
+	if err := os.WriteFile(filepath.Join(dir, "stdin"), in, 0o600); err != nil {
+		return 1
+	}
+	payload, err := os.ReadFile(filepath.Join(dir, "stdout"))
+	if err != nil {
+		return 1
+	}
+	if _, err := os.Stdout.Write(payload); err != nil {
+		return 1
+	}
+	code, _ := strconv.Atoi(os.Getenv(stubExitEnv))
+	return code
+}
+
+var (
+	stubBinOnce sync.Once
+	stubBinDir  string
+	stubBinErr  error
+)
+
+// stubBin copies this test binary to a directory of its own, under the name the
+// provider looks for. It is a real executable rather than a shell script
+// because Windows runs no shebang and resolves a bare `claude` on PATH only
+// through an extension PATHEXT knows. One copy serves every test.
+func stubBin() (string, error) {
+	stubBinOnce.Do(func() {
+		self, err := os.Executable()
+		if err != nil {
+			stubBinErr = err
+			return
+		}
+		body, err := os.ReadFile(self)
+		if err != nil {
+			stubBinErr = err
+			return
+		}
+		dir, err := os.MkdirTemp("", "claudecode-stub")
+		if err != nil {
+			stubBinErr = err
+			return
+		}
+		name := "claude"
+		if runtime.GOOS == "windows" {
+			name += ".exe"
+		}
+		if err := os.WriteFile(filepath.Join(dir, name), body, 0o700); err != nil {
+			stubBinErr = err
+			return
+		}
+		stubBinDir = dir
+	})
+	return stubBinDir, stubBinErr
+}
+
 // stub puts an executable named `claude` on PATH that records its invocation,
 // prints the given stdout and exits with the given code. No live model call
 // happens in any test.
 func stub(t *testing.T, stdout string, exit int) stubbed {
 	t.Helper()
 	dir := t.TempDir()
-	payload := filepath.Join(dir, "stdout")
-	if err := os.WriteFile(payload, []byte(stdout), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "stdout"), []byte(stdout), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	script := "#!/bin/sh\n" +
-		"printf '%s\\n' \"$@\" > " + filepath.Join(dir, "args") + "\n" +
-		"cat > " + filepath.Join(dir, "stdin") + "\n" +
-		"cat " + payload + "\n" +
-		"exit " + strconv.Itoa(exit) + "\n"
-	if err := os.WriteFile(filepath.Join(dir, "claude"), []byte(script), 0o700); err != nil {
+	bin, err := stubBin()
+	if err != nil {
 		t.Fatal(err)
 	}
 	// The stub directory goes first, so it shadows any real `claude`; the rest
-	// of PATH stays so the script itself can reach the standard tools.
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	// of PATH stays. Where this run's record goes, and what it should exit
+	// with, reach the stub through the environment it inherits.
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv(stubDirEnv, dir)
+	t.Setenv(stubExitEnv, strconv.Itoa(exit))
 	return stubbed{dir: dir}
 }
 
