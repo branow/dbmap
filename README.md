@@ -1,370 +1,112 @@
-# dbmap
+<h1 align="center">dbmap</h1>
 
-Read a database's catalog and write a compact index a coding agent can read in
-one pass: what tables exist, what a row of each one is, what the lookup codes
-mean, and what every procedure does.
+<p align="center"><b>Give your coding agent a map of the database.</b></p>
 
-Every session that touches an unfamiliar database starts from zero — list the
-tables, describe the columns, guess the join, run three more queries to learn
-that a status column holds six values. `dbmap` does that once, writes the
-answers to a small tree of TSV files, and on the next run re-reads only what
-actually changed.
+<p align="center">
+  Index a schema once into plain text, then ask your agent about tables,
+  procedures and lookups — with no connection, no credential and no tokens
+  spent rediscovering what it learned yesterday.
+</p>
 
-- **SQL Server and PostgreSQL**, behind one interface. Other engines are a
-  package, not a rewrite.
-- **Descriptions from any model** — the Anthropic API, any OpenAI-compatible
-  endpoint (including Ollama and vLLM), or the Claude Code CLI you already have
-  logged in.
-- **Safe on large, busy databases by construction.** Every query is proven
-  read-only before a connection is opened, carries a resource cap, and never
-  scans a table.
-- Credentials live in the OS keychain, never in a config file.
+<p align="center">
+  <a href="https://github.com/branow/dbmap/actions/workflows/ci.yml"><img alt="ci" src="https://github.com/branow/dbmap/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://github.com/branow/dbmap/releases/latest"><img alt="release" src="https://img.shields.io/github/v/release/branow/dbmap"></a>
+  <a href="LICENSE"><img alt="license" src="https://img.shields.io/github/license/branow/dbmap"></a>
+  <img alt="go" src="https://img.shields.io/github/go-mod/go-version/branow/dbmap">
+</p>
 
-## What it produces
+---
 
-```
-.dbmap/
-  databases.tsv     one row per database: engine, object counts, when it was built
-  README.md         the layout, for whoever reads the tree
-  <connection>/<database>/
-    tables.tsv      name, rows, size, triggers, columns, modified, fingerprint, description
-    views.tsv
-    procedures.tsv  parameters inline
-    functions.tsv   return type and parameters inline
-    synonyms.tsv
-    columns/<schema>.<name>.tsv  one per table and view: every column, key, index
-    bodies/<schema>.<name>.sql   one per view, procedure and function
-```
+Every session that touches an unfamiliar database starts from zero. List the
+tables. Describe the columns. Guess the join. Run three more queries to learn
+that a status column holds six values. Then the context window fills, the
+session ends, and the next one does the same walk again.
 
-The two files at the root are what let a tree be read by someone who never
-installs `dbmap`: `databases.tsv` says what is indexed and how old it is, and
-`README.md` says how to read it.
+`dbmap` does it once and writes the answers down.
 
-`tables.tsv`:
+## Features
 
-```
-name                    rows  size    triggers  cols  modified             fingerprint       description
-public.order_statuses   3     32 KB   0         3                          b8faf991d5fdbc5d  Maps order status codes to their descriptions, one row per status.
-public.orders           500   104 KB  0         5                          8a928f2e9dabdf50  Holds one row per placed order, keyed by order id.
-```
+- **Ask in plain language.** What does `dbo.Orders` hold, what does this
+  procedure do, which procedures write to that table, what do these status
+  codes mean — answered from the index, not from a connection.
+- **Works from a Claude Code plugin.** Install it and your agent finds the
+  index, reads it, and offers to rebuild it when it goes stale.
+- **Commit it with your code.** The index is a small tree of TSV and SQL files.
+  Whoever clones the repository gets it; no setup, no binary, no credential.
+- **Safe on a large, busy database.** Read-only by construction, resource-capped
+  per statement, never a table scan, health-checked before every batch.
+- **Cheap to keep current.** A rebuild re-describes only the objects whose
+  content actually changed, so a run against an unchanged database costs
+  nothing.
+- **SQL Server and PostgreSQL**, behind one interface.
+- **Any model.** The Anthropic API, any OpenAI-compatible endpoint (Ollama and
+  vLLM included), or the Claude Code CLI you are already logged into.
+- **Private by default.** Credentials live in the OS keychain, personal-data
+  columns are never read, and procedure bodies are redacted before anything is
+  stored.
 
-`columns/public.order_statuses.tsv`:
+## Get started
 
-```
-# public.order_statuses @b8faf991d5fdbc5d
-# rows 3  size 32 KB  triggers 0
-# Maps order status codes to their descriptions, one row per status.
-column          type     null      extra
-id              integer  not null
-name            text     not null
-email_contact   text     null
-# pk id
-```
-
-`bodies/public.open_orders.sql`:
-
-```sql
--- public.open_orders @94141fe08d0f22c2
--- Exposes pending orders from the orders table, showing id and total per order.
-
- SELECT o.id, o.total
-   FROM orders o
-     JOIN order_statuses s ON s.id = o.status_id
-  WHERE s.name = 'Pending'::text;
-```
-
-It is all plain text, so an agent — or `grep` — can read it without a parser.
-
-Bodies are written for the same reason columns are. A description is one
-sentence and names an object's *main* tables, not all of them, so it cannot
-answer the question you ask most after "what exists":
-
-```sh
-# what touches this table, and which of those write to it?
-grep -rl "dbo.Orders" .dbmap/prod/AppCore/bodies/
-grep -rliE "(insert|update|delete)[^;]{0,40}dbo\.Orders" .dbmap/prod/AppCore/bodies/
-```
-
-That answers exactly, with no database connection — which is the whole premise
-of the index. Bodies arrive already redacted, so a credential never reaches one.
-
-## Using it from a coding agent
-
-Reading an index needs no tool at all. Point any agent at the tree and it finds
-`README.md` at the root, which says what the files are and how to answer the
-question people actually ask — so a repository that commits its `.dbmap/` needs
-nothing else.
-
-For Claude Code there is a plugin in this repository, which adds finding the
-tree, building one, fetching one a team publishes, and a reminder when an index
-is overdue a rebuild:
+**1. Install the plugin** — this is all a reader needs:
 
 ```
 /plugin marketplace add branow/dbmap
 /plugin install dbmap@dbmap
 ```
 
-Installing it is enough to **read** an index; the CLI is needed only by whoever
-builds one. See [plugins/dbmap](plugins/dbmap/README.md).
+**2. Build an index** — once per database, by whoever has access:
 
-## Installation
+```
+/dbmap-build
+```
 
-**Homebrew** (macOS and Linux):
+It walks you through the rest: installing the CLI, adding the connection and
+the model backend, and where to write the tree — committed with the project,
+kept on your machine, or published in a repository your team pulls.
+
+**3. Ask.** No command, no slash, no flag:
+
+> What does the Orders table hold, and which procedures write to it?
+
+Teammates who pull a published index run `/dbmap-config sync`; an index
+committed under `.dbmap/` is found on its own.
+
+See [plugins/dbmap](plugins/dbmap/README.md) for what each skill does.
+
+## Without the plugin
+
+The tree is plain text, so any agent can read it and so can you:
+
+```sh
+grep "dbo.Orders" .dbmap/prod/AppCore/tables.tsv
+grep -rl "dbo.Orders" .dbmap/prod/AppCore/bodies/
+```
+
+Driving the build yourself is four commands:
 
 ```sh
 brew install branow/tap/dbmap
-```
 
-**Scoop** (Windows):
-
-```powershell
-scoop bucket add branow https://github.com/branow/scoop-bucket
-scoop install dbmap
-```
-
-**Linux packages**: `deb`, `rpm` and `apk` packages are attached to the
-[latest release](https://github.com/branow/dbmap/releases/latest).
-
-**Shell script** (Linux and macOS; installs to `/usr/local/bin`, or
-`~/.local/bin` when that is not writable):
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/branow/dbmap/main/scripts/install.sh | sh
-```
-
-**From source** (Go 1.26+):
-
-```sh
-go install github.com/branow/dbmap@latest
-```
-
-On macOS, build with `CGO_ENABLED=1` (the default for a native build). The
-keychain backend uses the Security framework so each stored secret is bound to
-the binary that stored it; a `CGO_ENABLED=0` macOS build silently falls back to
-a weaker path.
-
-## Quick start
-
-```sh
-# 1. Tell dbmap about a database. The password goes to the keychain,
-#    and the connection is probed before anything is stored.
-dbmap connection add local \
-  --engine postgres --host 127.0.0.1 --database appcore \
-  --username app --auth scram
-
-# 2. Tell it which model to write descriptions with.
+dbmap connection add local --engine postgres --host 127.0.0.1 \
+  --database appcore --username app --auth scram
 dbmap backend add haiku --provider claudecode --model claude-haiku-4-5
+dbmap profile create dev --connection local --backend haiku && dbmap profile switch dev
 
-# 3. Bind the two together and make it current.
-dbmap profile create dev --connection local --backend haiku
-dbmap profile switch dev
-
-# 4. Check everything before a build depends on it.
-dbmap doctor
-
-# 5. Build the index.
 dbmap index
 ```
 
-Start small on an unfamiliar database — `--dry-run` reports the plan without
-sending a single query beyond the catalog listing:
+On a database you do not own, start with `dbmap index --dry-run`, which reports
+the plan without sending a query beyond the catalog listing. Other install
+methods and every flag are in the [CLI reference](docs/CLI.md).
 
-```sh
-dbmap index --dry-run
-dbmap index --match order --limit 20
-```
+## Documentation
 
-## How it decides what to rebuild
-
-A full run costs one model call per object, so `dbmap` works hard not to make
-them twice. Staleness is decided in two tiers:
-
-- The engine's **modify signal** decides what to **fetch**. That is free, it is
-  already in the catalog listing, and fetching is cheap.
-- A **content fingerprint** of what came back decides what to **describe**. That
-  is the expensive half.
-
-A release that touches fifty stored procedures moves fifty modify dates, so
-`dbmap` re-reads fifty bodies — and describes only the ones whose text actually
-changed. Re-running against an unchanged database costs nothing:
-
-```
-$ dbmap index
-fetched     0
-reused      3
-described   0
-unchanged   3
-cost        0
-```
-
-PostgreSQL exposes no per-object modify date, so there the first tier is a
-no-op: everything is re-read (catalog reads are cheap) and the fingerprint does
-all the real work. The result is the same.
-
-`--force` rebuilds everything and ignores both tiers.
-
-`--dry-run` reports only what it can actually know. It reads the manifest and
-stops, so it can say how many objects must be re-read and why — but not how many
-will be described, because that is decided by a fingerprint of content it has
-not fetched. It reports an upper bound and says so, rather than printing a guess
-in the column a real run fills with a fact:
-
-```
-$ dbmap index --dry-run
-objects     412
-dry-run     true
-refetch     37
-untouched   375
-dropped     0
-reasons     modified 30, new 7
-describe    at most 37, decided by content fingerprint after the fetch
-```
-
-## Usage
-
-### Connections and backends
-
-Database connections and model backends are two independent named sets; a
-profile binds one of each. That way one model backend serves every database
-without repeating its API key.
-
-```sh
-dbmap connection add prod-replica --engine sqlserver --host db.internal \
-  --database AppCore --auth kerberos
-dbmap connection list
-dbmap connection show prod-replica
-dbmap connection remove prod-replica
-
-dbmap backend add gpt --provider openai --model gpt-4o-mini
-dbmap backend add local-llm --provider openai --base-url http://127.0.0.1:11434/v1
-```
-
-Supported engines are `postgres` and `sqlserver`; authentication is `scram`
-(PostgreSQL), `sqllogin` (SQL Server) or `kerberos` (both). TLS is always on and
-the server's certificate is verified; a server behind an internal certificate
-authority this machine does not trust needs `--trust-server-certificate` on the
-connection, which encrypts without proving who answered. Kerberos needs no
-extra configuration — `dbmap` finds your existing tickets, and converts the
-credential cache itself when the driver cannot read the platform's own format.
-Run `kinit` if you have no ticket; that is the whole setup. Backends are
-`anthropic`, `openai` (any OpenAI-compatible endpoint) and `claudecode`, which
-shells out to the Claude Code CLI and needs no API key of its own.
-
-### Building an index
-
-```sh
-dbmap index [connection] [flags]
-
-  --db string        database to index; defaults to the connection's
-  --match string     only objects whose name contains this substring
-  --limit int        process at most this many objects
-  --samples int      tables to sample: 0 for none, -1 for every table described
-  --out string       where the index tree is written (default ".dbmap")
-  --backend string   model backend to describe with
-  --dry-run          report the plan; send no query beyond the catalog listing
-```
-
-Progress goes to **stderr** and the summary to stdout, so `-o json` pipes
-cleanly while a person watching the terminal sees the work. Every stage that
-does work per object names that object, and a table names itself *before* it is
-read, so a run that stalls says what it stalled on:
-
-```
-manifest: 412 objects
-plan: 37 objects to refetch, 375 objects the modify signal proves untouched
-fetch: structure for 37 objects
-fetch: bodies for 18 objects
-sample: 1/12 dbo.OrderStatuses (3 rows, whole table)
-sample: 2/12 dbo.Orders (25 of 4218914 rows)
-describe: 37 objects in 4 batches, 4 batches at a time
-describe: batch 1/4 answered (12 objects)
-describe: dbo.OrderStatuses  Maps order status codes to their descriptions.
-describe: dbo.Orders  Holds one row per placed order, keyed by id.
-write: tables.tsv (412 rows)
-write: 380 column files, 194 body files under .dbmap/prod/AppCore
-```
-
-`--quiet` silences it.
-
-`--match` and `--limit` cover only what they selected and **merge** into
-whatever the tree already holds: rows they did not touch keep their descriptions
-and their fingerprints, so a narrowed run never makes the next full one pay to
-redescribe the rest. That is what makes them the right way to try `dbmap`
-against a database you do not own.
-
-### Checking a connection
-
-`dbmap doctor` reports one line per check and sends nothing heavy — one login
-and one health statement, no catalog read and no sampled row:
-
-```
-CHECK       STATUS  DETAIL
-credential  pass    found under db:local
-connection  pass    postgres at 127.0.0.1 via scram
-auth        pass    the server accepted the login
-read-only   pass    a guarded read-only statement was accepted
-health      pass    the server reports room for a build
-```
-
-### Scripting
-
-Every command takes `-o json`, every prompt has a flag, and `--no-input` turns a
-missing value into an error instead of a hang. Secrets can come from the
-environment (`DBMAP_SECRET_DB_<NAME>`, `DBMAP_SECRET_LLM_<NAME>`), which is how
-a CI runner works with no keychain at all.
-
-Exit codes are meaningful:
-
-| Code | Meaning |
+| | |
 |---|---|
-| 0 | Success |
-| 1 | Generic failure |
-| 2 | Cancelled at a prompt |
-| 3 | Validation error — bad flags, unknown name, unsupported configuration |
-| 4 | Authentication or authorization failure |
-| 5 | Not found |
-| 6 | Unavailable — server unreachable, rate limited, or out of room |
-
-Settings resolve as **flag > environment > config file > built-in default**.
-Configuration lives in `~/.config/dbmap/config.yml` (`%AppData%\dbmap` on
-Windows) and never contains a secret.
-
-## Safety
-
-`dbmap` is built to be pointed at a large, busy, shared database. A catalog
-walk is exactly the kind of job that can cost a server more than it can spare —
-`COUNT(*)` per table, an `sp_spaceused` loop, or a `SELECT DISTINCT` to learn a
-column's values each read every page they touch — so the expensive query shapes
-are not available to the tool at all:
-
-- Every query is a constant in the source, and a test walks all of them and
-  fails if one is not a read. `dbmap` issues no statement it did not author.
-  **Give it a read-only account anyway** — that is what actually guarantees it,
-  and it is the operator's call, not the tool's.
-- Every statement carries its engine's resource cap: `OPTION (MAXDOP 1,
-  MAX_GRANT_PERCENT = 1)` on SQL Server, and on PostgreSQL a read-only
-  transaction with a statement timeout and parallelism disabled. These are
-  instructions the *server* enforces, not checks `dbmap` makes on itself.
-- Row counts and sizes come from catalog statistics. There is no `COUNT(*)` and
-  no `sp_spaceused` anywhere in the tool.
-- Samples read `TOP (n)` / `LIMIT n` with **no `ORDER BY`**, so sampling a
-  huge table costs the same as sampling an eleven-row lookup.
-- Server health is checked before every batch, not once at startup. If the
-  server says it is short of memory, the run stops. If health cannot be read at
-  all, that is *unknown*, never healthy — and the run stops too.
-- Columns whose names suggest personal data are never read, matched on the name
-  because a type says nothing about who a value belongs to. A table with nothing
-  else in it is never queried at all. Withheld columns are still listed in the
-  index, so the description knows they exist.
-- TLS is always on and the server's certificate is verified by default.
-  Encryption that verifies nobody encrypts the traffic to whoever answered, so
-  skipping the check is a per-connection decision a user makes with
-  `--trust-server-certificate`, never a default they were never shown.
-- Sampled values are shown to the model and then discarded. They never reach the
-  index and never enter a fingerprint.
-- Procedure bodies are redacted on arrival, before anything is cached or sent:
-  patterns keep the key and drop the value, so `Password = <redacted>` still
-  records that a procedure authenticates somewhere.
+| [plugins/dbmap](plugins/dbmap/README.md) | The Claude Code plugin: the three skills, how an index is found |
+| [docs/CLI.md](docs/CLI.md) | Installing, every command and flag, scripting, exit codes, CI |
+| [docs/DESIGN.md](docs/DESIGN.md) | What the index looks like, what keeps it safe and cheap, adding an engine |
+| [AGENTS.md](AGENTS.md) | The contract for an agent changing this repository |
 
 ## Development
 
@@ -377,11 +119,6 @@ cd llm && go test ./...     # the llm module is separate
 `llm/` is a nested Go module (`github.com/branow/dbmap/llm`) with no dependency
 on the rest of the tool, so it can be imported on its own by anything that wants
 one structured-output call across several providers.
-
-`AGENTS.md` is the contract for a coding agent changing this repository, and
-`docs/DESIGN.md` explains why the tool is built the way it is — the staleness
-tiers, the safety rules and what they guard against, and what a new engine has to
-implement.
 
 ## License
 
