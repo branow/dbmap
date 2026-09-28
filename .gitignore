@@ -14,6 +14,8 @@
 !/llm/
 !/docs/
 !/scripts/
+!/.claude-plugin/
+!/plugins/
 
 # never tracked, anywhere
 **/dbmap.yml

@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/scripts/notify-stale.js --data-dir=${CLAUDE_PLUGIN_DATA}"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -88,6 +88,25 @@ grep -rliE "(insert|update|delete)[^;]{0,40}dbo\.Orders" .dbmap/prod/AppCore/bod
 That answers exactly, with no database connection — which is the whole premise
 of the index. Bodies arrive already redacted, so a credential never reaches one.
 
+## Using it from a coding agent
+
+Reading an index needs no tool at all. Point any agent at the tree and it finds
+`README.md` at the root, which says what the files are and how to answer the
+question people actually ask — so a repository that commits its `.dbmap/` needs
+nothing else.
+
+For Claude Code there is a plugin in this repository, which adds finding the
+tree, building one, fetching one a team publishes, and a reminder when an index
+is overdue a rebuild:
+
+```
+/plugin marketplace add branow/dbmap
+/plugin install dbmap@dbmap
+```
+
+Installing it is enough to **read** an index; the CLI is needed only by whoever
+builds one. See [plugins/dbmap](plugins/dbmap/README.md).
+
 ## Installation
 
 **Homebrew** (macOS and Linux):

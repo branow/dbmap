@@ -1,0 +1,6 @@
+{
+  "name": "dbmap",
+  "version": "0.1.0",
+  "description": "Answers questions about a database without connecting to one: what a table holds, what a stored procedure does, which procedures write to a table, what a lookup code means. Works from an index of the schema kept as plain files - committed with a project, private to a machine, or published for a team - and can build, refresh and fetch that index, and say when it has gone out of date.",
+  "skills": "./skills/"
+}
