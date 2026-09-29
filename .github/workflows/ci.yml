@@ -33,21 +33,6 @@ jobs:
         working-directory: llm
         run: go test -race ./...
 
-  # The macOS keychain backend binds each stored secret to the binary that
-  # stored it, which only happens in a cgo build. A CGO_ENABLED=0 darwin build
-  # still compiles but silently falls back to a weaker path, so assert the cgo
-  # build rather than letting a release degrade quietly.
-  darwin-cgo:
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-          cache: true
-      - run: CGO_ENABLED=1 go build ./...
-      - run: CGO_ENABLED=1 go test ./internal/credentials/...
-
   # A broken .goreleaser.yml otherwise surfaces for the first time when a tag is
   # pushed, which is the worst moment to find out.
   goreleaser:
@@ -66,6 +51,9 @@ jobs:
           version: "~> v2"
           args: check
 
+  # The darwin targets are here because the keychain backend loads the Security
+  # framework at run time: a release built anywhere would silently stop being
+  # possible if anything in that path ever needed the C toolchain again.
   cross:
     runs-on: ubuntu-latest
     strategy:
@@ -74,6 +62,8 @@ jobs:
           - { goos: linux, goarch: amd64 }
           - { goos: linux, goarch: arm64 }
           - { goos: windows, goarch: amd64 }
+          - { goos: darwin, goarch: amd64 }
+          - { goos: darwin, goarch: arm64 }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5

@@ -10,10 +10,10 @@ permissions:
   contents: write
 
 jobs:
-  # One macOS runner builds everything. The darwin artifacts are cgo builds -
-  # the keychain backend calls the Security framework directly - so they cannot
-  # be produced anywhere else; linux and windows are CGO_ENABLED=0 in
-  # .goreleaser.yml and cross-compile from here without help.
+  # Every artifact cross-compiles now that no target needs the C toolchain, so
+  # the runner is a choice rather than a constraint. It stays macOS because the
+  # test run below is the only one a tag gets, and the keychain backend it
+  # covers is the one piece of dbmap that runs on no other platform.
   release:
     runs-on: macos-latest
     steps:

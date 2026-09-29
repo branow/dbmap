@@ -3,6 +3,7 @@ module github.com/branow/dbmap
 go 1.26.0
 
 require (
+	github.com/ebitengine/purego v0.11.1
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/jcmturner/gofork v1.7.6
 	github.com/jcmturner/gokrb5/v8 v8.4.4

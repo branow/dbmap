@@ -1,4 +1,4 @@
-//go:build darwin && cgo && keychain
+//go:build darwin && keychain
 
 // This file is excluded from the normal suite twice over: it needs the
 // `keychain` build tag and DBMAP_KEYCHAIN_TEST=1. `go test ./...` must never

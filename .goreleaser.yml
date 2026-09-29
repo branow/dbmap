@@ -2,12 +2,11 @@ version: 2
 
 project_name: dbmap
 
-# macOS builds are cgo builds: the keychain backend calls the Security framework
-# directly so that each stored secret is bound to the binary that stored it.
-# That means darwin artifacts must be built on a macOS runner, one per arch —
-# a cgo build cannot cross-compile or emit both from one invocation. Linux and
-# Windows have no such requirement and stay on CGO_ENABLED=0, where the keychain
-# falls back to the platform's own credential store.
+# Every artifact is a CGO_ENABLED=0 build, darwin included: the macOS keychain
+# backend still calls the Security framework, but loads it at run time rather
+# than linking it, so a darwin binary needs no C toolchain, no macOS SDK and no
+# macOS machine. Linux and Windows fall back to the platform's own credential
+# store, as they always have.
 builds:
   - id: unix
     main: .
@@ -26,7 +25,7 @@ builds:
     main: .
     binary: dbmap
     env:
-      - CGO_ENABLED=1
+      - CGO_ENABLED=0
     goos: [darwin]
     goarch: [amd64, arm64]
     ldflags:

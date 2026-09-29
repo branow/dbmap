@@ -1,4 +1,4 @@
-//go:build darwin && cgo
+//go:build darwin
 
 package credentials
 
@@ -65,5 +65,28 @@ func TestBlockedStatusReachesTheRemedy(t *testing.T) {
 		if !strings.Contains(failure.Remedy, want) {
 			t.Errorf("remedy %q does not mention %q", failure.Remedy, want)
 		}
+	}
+}
+
+// TestSecurityFrameworkLoads covers the runtime binding itself: every symbol the
+// keychain path calls is resolved by name when the framework is loaded, so a
+// name the OS stops exporting fails here, once, instead of panicking inside a
+// command. It opens no keychain and reads no item - only the framework's own
+// symbol table is touched.
+func TestSecurityFrameworkLoads(t *testing.T) {
+	if err := loadSecurity(); err != nil {
+		t.Fatalf("loadSecurity: %v", err)
+	}
+	for _, table := range [][]constant{securityConstants, coreFoundationConstants} {
+		for _, c := range table {
+			if *c.dest == 0 {
+				t.Errorf("%s resolved to a nil reference", c.name)
+			}
+		}
+	}
+	// These two are addresses of structs rather than references, and a nil one
+	// would give every query dictionary the wrong callbacks.
+	if kCFTypeDictionaryKeyCallBacks == 0 || kCFTypeDictionaryValueCallBacks == 0 {
+		t.Error("the dictionary callbacks resolved to a nil address")
 	}
 }

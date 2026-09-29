@@ -201,7 +201,6 @@ Windows) and never contains a secret.
 go install github.com/branow/dbmap@latest
 ```
 
-Requires Go 1.26+. On macOS, build with `CGO_ENABLED=1` (the default for a
-native build). The keychain backend uses the Security framework so each stored
-secret is bound to the binary that stored it; a `CGO_ENABLED=0` macOS build
-silently falls back to a weaker path.
+Requires Go 1.26+ and nothing else: no platform needs a C toolchain. On macOS
+the keychain backend loads the Security framework at run time, so each stored
+secret is still bound to the binary that stored it.
