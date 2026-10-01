@@ -39,7 +39,7 @@ type chain struct {
 
 // New assembles the store for a policy.
 func New(o Options) (Store, error) {
-	keychain := newKeychain(o.Service, ui(o.Interactive))
+	keychain := newKeychain(o.Service, o.Interactive)
 	switch o.Policy {
 	case "", PolicyNever:
 		return &chain{env: NewEnv(o.Env), keychain: keychain}, nil

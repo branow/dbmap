@@ -65,8 +65,8 @@ gofmt -l .        # must print nothing
 - Tests live beside the code as `*_test.go`. Whoever writes the code writes its tests.
 - Table-driven. **No network, no real database, no real keychain, no real model call**
   in any test. Every external dependency sits behind an interface with an in-memory
-  fake. The one test that touches a real keychain is gated behind both a build tag and
-  an environment variable so it never runs by accident.
+  fake. The OS credential store is reached through `gokey`, whose own suite covers the
+  real thing; nothing here may open the developer's login keychain.
 - Test the decision, not the implementation. Several tests exist specifically to stop a
   past mistake being reintroduced — the structured-output field being renamed, a
   sampled table's value domain being withheld, a catalog boolean being read in only one

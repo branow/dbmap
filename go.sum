@@ -14,6 +14,8 @@ github.com/anthropics/anthropic-sdk-go v1.72.0 h1:T0qQWWfygiL24lqEQaffRXCvEeno3y
 github.com/anthropics/anthropic-sdk-go v1.72.0/go.mod h1:x+lPk/cCl48uRegeP0hlYYBN1b7bEBTveInIMgLicnY=
 github.com/bahlo/generic-list-go v0.2.0 h1:5sz/EEAK+ls5wF+NeqDpk5+iNdMDXrh3z3nPnH1Wvgk=
 github.com/bahlo/generic-list-go v0.2.0/go.mod h1:2KvAjgMlE5NNynlg/5iLrrCCZ2+5xWbdbCW3pNTGyYg=
+github.com/branow/gokey v0.1.0 h1:un4VqiI+RBXTasvpCSFNWOMfD/+Q7GTH+BarHp9O5j0=
+github.com/branow/gokey v0.1.0/go.mod h1:wcco7pMczjgAbxyFjImdRpF5deaqqKm82uS7UUh7snE=
 github.com/branow/gollm v0.1.0 h1:O0qp4+H9K7427YX9Wlrx0sS29Y4aq6I10BcOnQC0e80=
 github.com/branow/gollm v0.1.0/go.mod h1:ew2SpZ/t6S9wOl/ZOEyz7X5HM5mXaMcTP1wjlzhLQsY=
 github.com/buger/jsonparser v1.1.2 h1:frqHqw7otoVbk5M8LlE/L7HTnIq2v9RX6EJ48i9AxJk=

@@ -318,6 +318,7 @@ main.go
     └── internal/cmdutil     Factory: the dependency bundle, and ExitCode
         ├── internal/config        named connections, backends, profiles
         ├── internal/credentials   keychain store, env path, opt-in plaintext
+        │   └── gokey (external)       the OS credential stores
         ├── internal/iostreams     streams, tty, prompts
         ├── internal/output        table and json writers
         │
@@ -392,5 +393,7 @@ that samples emit no `ORDER BY`, that a table of only personal data is never
 queried, that an unreadable health reading is not healthy, that a second run
 over unchanged input makes no model call.
 
-The real-keychain test is gated behind both a build tag and an environment
-variable, so `go test ./...` never touches the developer's login keychain.
+The OS credential store is reached through
+[gokey](https://github.com/branow/gokey), and the round trip against a real
+store is its suite's job, not this one's: `go test ./...` never touches the
+developer's login keychain.

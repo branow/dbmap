@@ -91,13 +91,13 @@ func TestDefaultOptionsNeverPrompt(t *testing.T) {
 	tests := []struct {
 		name    string
 		options Options
-		want    ui
+		want    bool
 	}{
-		{name: "zero value", options: Options{}, want: noUI},
-		{name: "never", options: Options{Policy: PolicyNever}, want: noUI},
+		{name: "zero value", options: Options{}, want: false},
+		{name: "never", options: Options{Policy: PolicyNever}, want: false},
 		{name: "plaintext", options: Options{Policy: PolicyPlaintext, File: "x.yml"},
-			want: noUI},
-		{name: "opted in", options: Options{Interactive: true}, want: allowUI},
+			want: false},
+		{name: "opted in", options: Options{Interactive: true}, want: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -105,8 +105,8 @@ func TestDefaultOptionsNeverPrompt(t *testing.T) {
 			if err != nil {
 				t.Fatalf("New: %v", err)
 			}
-			if got := store.(*chain).keychain.ui; got != tt.want {
-				t.Errorf("keychain ui = %v, want %v", got, tt.want)
+			if got := store.(*chain).keychain.prompt; got != tt.want {
+				t.Errorf("keychain prompt = %v, want %v", got, tt.want)
 			}
 		})
 	}
