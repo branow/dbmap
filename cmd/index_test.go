@@ -10,7 +10,7 @@ import (
 	"github.com/branow/dbmap/internal/index"
 	"github.com/branow/dbmap/internal/plan"
 	"github.com/branow/dbmap/internal/redact"
-	"github.com/branow/dbmap/llm"
+	"github.com/branow/gollm"
 )
 
 // flags renders the index command's flag surface, which is the tool's contract
@@ -250,7 +250,7 @@ func TestReportRendersTheWholeSummary(t *testing.T) {
 		Environment: "primary", Database: "AppCore", Dir: "out",
 		Objects: 12, Fetched: 5, Reused: 7, Described: 2, Unchanged: 3, Sampled: 4,
 		Dropped: []string{"dbo.Gone"},
-		Usage:   llm.Usage{InputTokens: 100, OutputTokens: 20},
+		Usage:   gollm.Usage{InputTokens: 100, OutputTokens: 20},
 	}); err != nil {
 		t.Fatalf("report: %v", err)
 	}

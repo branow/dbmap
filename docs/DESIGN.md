@@ -332,7 +332,7 @@ main.go
         │   │   └── internal/fingerprint
         │   ├── internal/sample        projection planning and ordering
         │   ├── internal/describe      prompts, batching, name matching
-        │   │   └── llm (module)           provider seam
+        │   │   └── gollm (external)          provider seam
         │   └── internal/render        the TSV tree
         │
         └── internal/catalog      the shared vocabulary; imports nothing

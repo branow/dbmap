@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/branow/dbmap/internal/catalog"
-	"github.com/branow/dbmap/llm"
+	"github.com/branow/gollm"
 )
 
 // counter answers every batch with a sentence per object it was asked about,
@@ -25,7 +25,7 @@ type counter struct {
 
 func (c *counter) Name() string { return "counter" }
 
-func (c *counter) Complete(_ context.Context, req llm.Request) (*llm.Response, error) {
+func (c *counter) Complete(_ context.Context, req gollm.Request) (*gollm.Response, error) {
 	c.mu.Lock()
 	c.calls++
 	c.live++
@@ -57,7 +57,7 @@ func (c *counter) Complete(_ context.Context, req llm.Request) (*llm.Response, e
 	c.mu.Lock()
 	c.live--
 	c.mu.Unlock()
-	return &llm.Response{Structured: data, Usage: llm.Usage{InputTokens: 1}}, nil
+	return &gollm.Response{Structured: data, Usage: gollm.Usage{InputTokens: 1}}, nil
 }
 
 func inputs(n int) []Input {

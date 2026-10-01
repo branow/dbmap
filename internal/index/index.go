@@ -16,7 +16,7 @@ import (
 	"github.com/branow/dbmap/internal/redact"
 	"github.com/branow/dbmap/internal/render"
 	"github.com/branow/dbmap/internal/sample"
-	"github.com/branow/dbmap/llm"
+	"github.com/branow/gollm"
 )
 
 // Options configure one build. Every field is resolved by the caller: this
@@ -52,7 +52,7 @@ type Options struct {
 	// usage carried on a response is replayed from the model cache on a hit, so
 	// a resumed run would otherwise report money it did not spend. Nil means
 	// report what the responses carried.
-	Spend  *llm.Usage
+	Spend  *gollm.Usage
 	Logger Logger
 }
 
@@ -100,7 +100,7 @@ type Summary struct {
 	Reasons map[plan.Reason]int
 	// Redactions tallies secrets stripped out of module bodies, per class.
 	Redactions redact.Counts
-	Usage      llm.Usage
+	Usage      gollm.Usage
 	// Failed are describe batches that errored; skipped, not fatal.
 	Failed      []error
 	Catalogs    []render.Written
@@ -110,7 +110,7 @@ type Summary struct {
 
 // Build runs the whole pipeline once. A nil client describes nothing. src is
 // released before the describe stage on every path, error paths included.
-func Build(ctx context.Context, src Source, client llm.Client, opts Options) (Summary, error) {
+func Build(ctx context.Context, src Source, client gollm.Client, opts Options) (Summary, error) {
 	dir := filepath.Join(opts.Out, opts.Environment, opts.Database)
 	summary := Summary{
 		Environment: opts.Environment,
@@ -434,7 +434,7 @@ func samples(
 // describeAll sends the batches. A build with no client describes nothing.
 func describeAll(
 	ctx context.Context,
-	client llm.Client,
+	client gollm.Client,
 	todo []catalog.Entry,
 	samples map[string]catalog.Sample,
 	opts Options,

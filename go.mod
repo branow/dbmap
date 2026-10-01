@@ -3,6 +3,7 @@ module github.com/branow/dbmap
 go 1.26.0
 
 require (
+	github.com/branow/gollm v0.1.0
 	github.com/ebitengine/purego v0.11.1
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/jcmturner/gofork v1.7.6
@@ -51,10 +52,3 @@ require (
 	golang.org/x/sys v0.48.0 // indirect
 	golang.org/x/text v0.41.0 // indirect
 )
-
-// The llm module lives in this repo but ships its own go.mod so a second
-// project can import it without dbmap's dependency graph. It is wired in by
-// path here; a tagged require would be a release concern, not a build one.
-require github.com/branow/dbmap/llm v0.0.0
-
-replace github.com/branow/dbmap/llm => ./llm

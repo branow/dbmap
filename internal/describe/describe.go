@@ -8,7 +8,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/branow/dbmap/llm"
+	"github.com/branow/gollm"
 )
 
 // Batches are sized by prompt characters, then by count.
@@ -75,7 +75,7 @@ type Result struct {
 	Missing []string
 	// Failed lists batches that errored; a failed batch is skipped, never fatal.
 	Failed []error
-	Usage  llm.Usage
+	Usage  gollm.Usage
 }
 
 // Logger reports batch progress and what was skipped.
@@ -176,7 +176,7 @@ func BatchPrompt(items []Item) string {
 // Result rather than aborting the run. Batches run opts.workers() at a time and
 // are merged back in batch order, so the result does not depend on which
 // finished first.
-func All(ctx context.Context, client llm.Client, inputs []Input, opts Options) (Result, error) {
+func All(ctx context.Context, client gollm.Client, inputs []Input, opts Options) (Result, error) {
 	result := Result{Sentences: map[string]string{}}
 
 	items, err := Prepare(inputs)
@@ -219,15 +219,15 @@ func All(ctx context.Context, client llm.Client, inputs []Input, opts Options) (
 // the merge happens in batch order rather than completion order.
 type outcome struct {
 	sentences map[string]string
-	usage     llm.Usage
+	usage     gollm.Usage
 	err       error
 }
 
 // describeBatch sends one batch and resolves its answers back onto the keys
 // that were asked for.
-func describeBatch(ctx context.Context, client llm.Client, batch []Item,
+func describeBatch(ctx context.Context, client gollm.Client, batch []Item,
 	i, of int, opts Options) outcome {
-	response, err := client.Complete(ctx, llm.Request{
+	response, err := client.Complete(ctx, gollm.Request{
 		Prompt: BatchPrompt(batch),
 		Schema: Schema,
 		Model:  opts.Model,

@@ -10,7 +10,7 @@ import (
 	"github.com/branow/dbmap/internal/catalog"
 	"github.com/branow/dbmap/internal/engine"
 	"github.com/branow/dbmap/internal/redact"
-	"github.com/branow/dbmap/llm"
+	"github.com/branow/gollm"
 )
 
 // database is a whole database with nothing real behind it. It records every
@@ -129,7 +129,7 @@ type model struct {
 
 func (m *model) Name() string { return "fake" }
 
-func (m *model) Complete(_ context.Context, req llm.Request) (*llm.Response, error) {
+func (m *model) Complete(_ context.Context, req gollm.Request) (*gollm.Response, error) {
 	m.calls++
 	if m.source != nil && !m.source.closed {
 		m.live = true
@@ -157,10 +157,10 @@ func (m *model) Complete(_ context.Context, req llm.Request) (*llm.Response, err
 	if err != nil {
 		return nil, err
 	}
-	return &llm.Response{
+	return &gollm.Response{
 		Structured: body,
 		Model:      "fake-model",
-		Usage:      llm.Usage{InputTokens: 10, OutputTokens: 5},
+		Usage:      gollm.Usage{InputTokens: 10, OutputTokens: 5},
 	}, nil
 }
 
@@ -242,7 +242,7 @@ func (d *database) reset() {
 	d.closed = false
 }
 
-func mustBuild(t *testing.T, src Source, client llm.Client, opts Options) Summary {
+func mustBuild(t *testing.T, src Source, client gollm.Client, opts Options) Summary {
 	t.Helper()
 	summary, err := Build(context.Background(), src, client, opts)
 	if err != nil {

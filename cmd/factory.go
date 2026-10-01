@@ -10,8 +10,8 @@ import (
 	"github.com/branow/dbmap/internal/connect"
 	"github.com/branow/dbmap/internal/credentials"
 	"github.com/branow/dbmap/internal/iostreams"
-	"github.com/branow/dbmap/llm"
-	"github.com/branow/dbmap/llm/provider"
+	"github.com/branow/gollm"
+	"github.com/branow/gollm/provider"
 )
 
 // probeTimeout bounds a verification: generous for a round trip to a slow
@@ -56,7 +56,7 @@ func verifyConnection(ctx context.Context, name string, entry config.Connection,
 // stored anything at all while advertising a --no-verify flag.
 func verifyBackend(ctx context.Context, name string, entry config.Backend,
 	secret credentials.Secret) error {
-	client, err := provider.New(llm.Config{
+	client, err := provider.New(gollm.Config{
 		Provider: string(entry.Provider),
 		Model:    entry.Model,
 		BaseURL:  entry.BaseURL,
@@ -68,7 +68,7 @@ func verifyBackend(ctx context.Context, name string, entry config.Backend,
 
 	ctx, cancel := context.WithTimeout(ctx, backendProbeTimeout)
 	defer cancel()
-	_, err = client.Complete(ctx, llm.Request{
+	_, err = client.Complete(ctx, gollm.Request{
 		Prompt: "Reply with the word ok.",
 		Schema: json.RawMessage(`{"type":"object","additionalProperties":false,` +
 			`"required":["ok"],"properties":{"ok":{"type":"string"}}}`),

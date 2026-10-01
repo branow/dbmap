@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	"github.com/branow/dbmap/internal/catalog"
-	"github.com/branow/dbmap/llm"
+	"github.com/branow/gollm"
 )
 
 // fake replies with whatever each call is scripted to return, so every test
@@ -24,10 +24,10 @@ type fake struct {
 
 func (f *fake) Name() string { return "fake" }
 
-func (f *fake) Complete(_ context.Context, req llm.Request) (*llm.Response, error) {
+func (f *fake) Complete(_ context.Context, req gollm.Request) (*gollm.Response, error) {
 	f.prompts = append(f.prompts, req.Prompt)
 	if f.at >= len(f.replies) {
-		return &llm.Response{Structured: json.RawMessage(`{"objects":[]}`)}, nil
+		return &gollm.Response{Structured: json.RawMessage(`{"objects":[]}`)}, nil
 	}
 	scripted := f.replies[f.at]
 	f.at++
@@ -36,10 +36,10 @@ func (f *fake) Complete(_ context.Context, req llm.Request) (*llm.Response, erro
 	case error:
 		return nil, v
 	case string:
-		return &llm.Response{Structured: json.RawMessage(v)}, nil
+		return &gollm.Response{Structured: json.RawMessage(v)}, nil
 	case reply:
 		data, _ := json.Marshal(v)
-		return &llm.Response{Structured: data}, nil
+		return &gollm.Response{Structured: data}, nil
 	}
 	return nil, errors.New("bad script")
 }

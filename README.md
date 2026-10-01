@@ -113,12 +113,11 @@ methods and every flag are in the [CLI reference](docs/CLI.md).
 ```sh
 go build ./...
 go test ./...
-cd llm && go test ./...     # the llm module is separate
 ```
 
-`llm/` is a nested Go module (`github.com/branow/dbmap/llm`) with no dependency
-on the rest of the tool, so it can be imported on its own by anything that wants
-one structured-output call across several providers.
+The provider seam lives outside this repository, in
+[gollm](https://github.com/branow/gollm): one structured-output call across
+several providers, importable on its own by anything that wants it.
 
 ## License
 

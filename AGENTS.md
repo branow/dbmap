@@ -7,18 +7,18 @@ re-derive a constant that already has a stated justification.
 
 ## Stack
 
-Go, two modules: `github.com/branow/dbmap` (root) and `github.com/branow/dbmap/llm`
-(nested, importable on its own). Cobra for the CLI.
+Go, one module: `github.com/branow/dbmap`. Cobra for the CLI. The provider seam that
+talks to a model is `github.com/branow/gollm`, a separate repository; a change the
+tool needs there lands there first and arrives here as a version bump.
 
-Dependencies are **pinned** in both `go.mod` files. Never run a bare `go get`, never
-upgrade a pin as a side effect. `go mod tidy` is fine once your code has imports. If
-you genuinely need a new dependency, stop and ask rather than adding one.
+Dependencies are **pinned** in `go.mod`. Never run a bare `go get`, never upgrade a
+pin as a side effect. `go mod tidy` is fine once your code has imports. If you
+genuinely need a new dependency, stop and ask rather than adding one.
 
-Run both module test suites; the nested one does not run from the root:
+Run the suite before every commit:
 
 ```sh
 go build ./... && go vet ./... && go test ./...
-cd llm && go test ./...
 gofmt -l .        # must print nothing
 ```
 
@@ -83,9 +83,9 @@ first word, no body, no attribution or co-author line.
 ## Scope
 
 If a change you need falls outside what you were asked to do — a dependency, a `go.mod`
-edit, a public API change in `llm`, a rename that ripples — stop and report it rather
-than making it. When several agents work at once, each edits only its assigned paths and
-reports anything it needs elsewhere.
+edit, a change to the `gollm` API this tool depends on, a rename that ripples — stop
+and report it rather than making it. When several agents work at once, each edits only
+its assigned paths and reports anything it needs elsewhere.
 
 ## Never commit
 

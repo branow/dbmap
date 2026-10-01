@@ -13,7 +13,7 @@ import (
 	"github.com/branow/dbmap/internal/cmdutil"
 	"github.com/branow/dbmap/internal/index"
 	"github.com/branow/dbmap/internal/iostreams"
-	"github.com/branow/dbmap/llm"
+	"github.com/branow/gollm"
 )
 
 // priced answers every call with the same body and the same bill.
@@ -21,11 +21,11 @@ type priced struct{ calls int }
 
 func (p *priced) Name() string { return "priced" }
 
-func (p *priced) Complete(context.Context, llm.Request) (*llm.Response, error) {
+func (p *priced) Complete(context.Context, gollm.Request) (*gollm.Response, error) {
 	p.calls++
-	return &llm.Response{
+	return &gollm.Response{
 		Structured: json.RawMessage(`{"objects":[]}`),
-		Usage:      llm.Usage{InputTokens: 100, OutputTokens: 10, Cost: 0.25},
+		Usage:      gollm.Usage{InputTokens: 100, OutputTokens: 10, Cost: 0.25},
 	}, nil
 }
 
@@ -38,11 +38,11 @@ func TestACachedAnswerIsNotBilledAgain(t *testing.T) {
 	dir := t.TempDir()
 	provider := &priced{}
 
-	spend := &llm.Usage{}
-	metered := llm.WithUsage(provider, spend)
-	client := llm.WithCache(metered, dir)
+	spend := &gollm.Usage{}
+	metered := gollm.WithUsage(provider, spend)
+	client := gollm.WithCache(metered, dir)
 
-	request := llm.Request{Prompt: "describe dbo.Orders", Schema: json.RawMessage(`{}`)}
+	request := gollm.Request{Prompt: "describe dbo.Orders", Schema: json.RawMessage(`{}`)}
 	first, err := client.Complete(context.Background(), request)
 	if err != nil {
 		t.Fatalf("first call: %v", err)
@@ -75,13 +75,13 @@ func TestACachedAnswerIsNotBilledAgain(t *testing.T) {
 // build asked for.
 func TestARetriedCallIsBilledForEveryAttempt(t *testing.T) {
 	provider := &flaky{fail: 2}
-	spend := &llm.Usage{}
-	client := llm.WithRetry(llm.WithUsage(provider, spend), llm.RetryConfig{
+	spend := &gollm.Usage{}
+	client := gollm.WithRetry(gollm.WithUsage(provider, spend), gollm.RetryConfig{
 		Attempts: 4,
 		Sleep:    func(context.Context, time.Duration) error { return nil },
 	})
 
-	if _, err := client.Complete(context.Background(), llm.Request{}); err != nil {
+	if _, err := client.Complete(context.Background(), gollm.Request{}); err != nil {
 		t.Fatalf("Complete: %v", err)
 	}
 	if provider.calls != 3 {
@@ -102,15 +102,15 @@ type flaky struct {
 
 func (f *flaky) Name() string { return "flaky" }
 
-func (f *flaky) Complete(context.Context, llm.Request) (*llm.Response, error) {
+func (f *flaky) Complete(context.Context, gollm.Request) (*gollm.Response, error) {
 	f.calls++
 	if f.fail > 0 {
 		f.fail--
-		return nil, &llm.Error{Class: llm.ClassUnavailable, Provider: "flaky"}
+		return nil, &gollm.Error{Class: gollm.ClassUnavailable, Provider: "flaky"}
 	}
-	return &llm.Response{
+	return &gollm.Response{
 		Structured: json.RawMessage(`{}`),
-		Usage:      llm.Usage{InputTokens: 7},
+		Usage:      gollm.Usage{InputTokens: 7},
 	}, nil
 }
 
