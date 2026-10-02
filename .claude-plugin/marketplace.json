@@ -6,14 +6,14 @@
   },
   "metadata": {
     "description": "Database schema knowledge for coding agents: every table, view, procedure and function of a database, described in plain files an agent reads without a connection.",
-    "version": "0.3.0"
+    "version": "0.4.0"
   },
   "plugins": [
     {
       "name": "dbmap",
       "description": "Answers questions about a database without connecting to one: what a table holds, what a stored procedure does, which procedures write to a table, what a lookup code means. Works from an index of the schema kept as plain files - committed with a project, private to a machine, or published for a team - and can build, refresh and fetch that index, and say when it has gone out of date.",
       "source": "./plugins/dbmap",
-      "version": "0.3.0"
+      "version": "0.4.0"
     }
   ]
 }
