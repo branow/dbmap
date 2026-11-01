@@ -3,6 +3,7 @@ package credentials
 import (
 	"errors"
 	"fmt"
+	"io"
 )
 
 // Policy decides what may hold a secret when the OS keychain cannot. Never is
@@ -27,6 +28,9 @@ type Options struct {
 	// keychain's dialog. False by default: a dialog nobody can see would hang
 	// a script or a CI job forever.
 	Interactive bool
+	// Warn receives warnings that do not fail the call. Nil means standard
+	// error.
+	Warn io.Writer
 }
 
 // chain is the assembled stack: environment, then keychain, then - only under
@@ -39,7 +43,7 @@ type chain struct {
 
 // New assembles the store for a policy.
 func New(o Options) (Store, error) {
-	keychain := newKeychain(o.Service, o.Interactive)
+	keychain := newKeychain(o.Service, o.Interactive, o.Warn)
 	switch o.Policy {
 	case "", PolicyNever:
 		return &chain{env: NewEnv(o.Env), keychain: keychain}, nil

@@ -10,10 +10,10 @@ permissions:
   contents: write
 
 jobs:
-  # Every artifact cross-compiles now that no target needs the C toolchain, so
-  # the runner is a choice rather than a constraint. It stays macOS because the
-  # test run below is the only one a tag gets, and the keychain backend it
-  # covers is the one piece of dbmap that runs on no other platform.
+  # macOS, because scripts/sign.sh signs the darwin binary with codesign, and
+  # because the test run below is the only one a tag gets and the keychain
+  # backend it covers is the one piece of dbmap that runs on no other platform.
+  # Every other artifact cross-compiles from here with CGO_ENABLED=0.
   release:
     runs-on: macos-latest
     steps:
@@ -35,6 +35,29 @@ jobs:
       - run: go vet ./...
       - run: go test ./...
 
+      # scripts/sign.sh refuses to run without an identity, so the certificate
+      # goes into a throwaway keychain first. It is self-signed and untrusted,
+      # which codesign accepts: the requirement pins the certificate itself,
+      # and trust only matters to Gatekeeper.
+      - name: import signing certificate
+        env:
+          P12: ${{ secrets.MACOS_SIGN_P12 }}
+          P12_PASSWORD: ${{ secrets.MACOS_SIGN_P12_PASSWORD }}
+        run: |
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          password=$(openssl rand -hex 16)
+          echo "$P12" | base64 --decode > "$RUNNER_TEMP/sign.p12"
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          security import "$RUNNER_TEMP/sign.p12" -k "$keychain" \
+            -P "$P12_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: \
+            -k "$password" "$keychain" > /dev/null
+          security list-keychains -d user -s "$keychain" \
+            $(security list-keychains -d user | tr -d '"')
+          rm "$RUNNER_TEMP/sign.p12"
+
       - uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser
@@ -46,3 +69,6 @@ jobs:
           # after the binaries are already built. The check job on every push
           # catches a broken config; only a missing secret can get this far.
           TAP_GITHUB_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
+          # Absent, scripts/sign.sh fails the build before anything is
+          # published rather than ship an ad-hoc signed darwin binary.
+          MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}

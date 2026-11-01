@@ -66,7 +66,7 @@ func NewRoot(f *cmdutil.Factory, build Build) *cobra.Command {
 		// Force describes one invocation only: it has no env or file layer.
 		f.Flags.Force = force
 		if f.Store == nil {
-			store, err := openStore(f.Config, overrides, f.IO.CanPrompt())
+			store, err := openStore(f.Config, overrides, f.IO.CanPrompt(), f.IO.ErrOut)
 			if err != nil {
 				return err
 			}

@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"time"
 
 	"github.com/branow/dbmap/internal/cmdutil"
@@ -84,7 +85,7 @@ func verifyBackend(ctx context.Context, name string, entry config.Backend,
 // interactive may be true only when a person is watching a terminal: the macOS
 // keychain binds an item to the storing binary's code identity, so a rebuilt
 // binary is asked to re-authorize, and a dialog nobody can see blocks forever.
-func openStore(c *config.Config, o config.Overrides, interactive bool) (credentials.Store, error) {
+func openStore(c *config.Config, o config.Overrides, interactive bool, warn io.Writer) (credentials.Store, error) {
 	fallback, err := c.Fallback(o)
 	if err != nil {
 		return nil, err
@@ -98,5 +99,6 @@ func openStore(c *config.Config, o config.Overrides, interactive bool) (credenti
 		Service:     credentials.Service,
 		File:        file,
 		Interactive: interactive,
+		Warn:        warn,
 	})
 }

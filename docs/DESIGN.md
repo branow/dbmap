@@ -247,6 +247,30 @@ So, non-negotiably:
   from the environment. There is no silent fallback to a plaintext file: a
   keychain failure is an error naming the fix, because a transient failure would
   otherwise persist a database password to disk permanently.
+- **A keychain read is silent first.** On macOS gokey binds an item to the code
+  identity of the binary that stored it, so another build is refused. Only when
+  the silent read is refused, and a human is watching a terminal, is it
+  repeated with the authorization dialog allowed; an unattended run fails with
+  the remedy instead of hanging on a dialog nobody can see. An entry released
+  through the dialog is stored again by this build, so the next run is silent.
+  A re-save that fails is a warning, not an error: the read succeeds and the
+  dialog comes back next time.
+- **An item another program owns is replaced by deleting it.** The keychain
+  will not let this binary overwrite such an item (OSStatus -25244), so on
+  exactly that refusal the old item is deleted through `/usr/bin/security`
+  (delete only, no secret passes through it) and added again. Any other write
+  failure is reported as it is: the retry would most likely fail too, and the
+  stored secret would be gone.
+- **Release darwin binaries are signed** with a self-signed release
+  certificate (`scripts/sign.sh`, run by goreleaser on the universal binary on
+  a macOS runner). Ad-hoc, the code identity is the cdhash, which changes with
+  every build; signed, the item's access list names the identifier
+  `com.branow.dbmap` plus the certificate, and that survives upgrades. The
+  partition list does not: without an Apple Team ID macOS partitions the item
+  by cdhash, so the first read after each upgrade asks once per stored secret,
+  and the re-save above keeps it to once. Only a Developer ID certificate
+  removes that dialog. A build from source is ad-hoc signed, so it asks once
+  after every rebuild.
 
 ## Describing
 
