@@ -203,6 +203,8 @@ go install github.com/branow/dbmap@latest
 
 Requires Go 1.26+ and nothing else: no platform needs a C toolchain. On macOS
 the keychain backend loads the Security framework at run time, so each stored
-secret is still bound to the binary that stored it. Windows and Linux use
-Credential Manager and the Secret Service respectively, neither of which binds
-an item to one program.
+secret is still bound to the binary that stored it. A build from source is
+ad-hoc signed, so after each rebuild the keychain asks once for every stored
+secret, on a terminal, and dbmap stores it again under the new build. Windows
+and Linux use Credential Manager and the Secret Service respectively, neither
+of which binds an item to one program.

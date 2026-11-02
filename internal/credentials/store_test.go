@@ -103,7 +103,8 @@ func TestKeychainErrors(t *testing.T) {
 
 // TestKeychainAsksOnlyWhenSomeoneIsWatching is the hang this prevents: a store
 // not told a human is present must refuse the keychain's dialog on every
-// operation, because a dialog nobody can see blocks forever.
+// operation, because a dialog nobody can see blocks forever. A read is silent
+// even then, until the keychain refuses it (see TestApprovedEntryIsStoredAgain).
 func TestKeychainAsksOnlyWhenSomeoneIsWatching(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -111,8 +112,8 @@ func TestKeychainAsksOnlyWhenSomeoneIsWatching(t *testing.T) {
 		want     bool
 	}{
 		{name: "default", keychain: NewKeychain("test"), want: false},
-		{name: "non-interactive", keychain: newKeychain("test", false), want: false},
-		{name: "interactive", keychain: newKeychain("test", true), want: true},
+		{name: "non-interactive", keychain: newKeychain("test", false, nil), want: false},
+		{name: "interactive", keychain: newKeychain("test", true, nil), want: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -131,9 +132,10 @@ func TestKeychainAsksOnlyWhenSomeoneIsWatching(t *testing.T) {
 			if len(*seen) != 3 {
 				t.Fatalf("calls recorded = %d, want 3", len(*seen))
 			}
+			want := []bool{false, tt.want, tt.want}
 			for i, prompt := range *seen {
-				if prompt != tt.want {
-					t.Errorf("call %d asked with prompt %v, want %v", i, prompt, tt.want)
+				if prompt != want[i] {
+					t.Errorf("call %d asked with prompt %v, want %v", i, prompt, want[i])
 				}
 			}
 		})

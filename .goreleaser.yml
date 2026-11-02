@@ -34,9 +34,18 @@ builds:
       - -X main.commit={{.Commit}}
       - -X main.date={{.Date}}
 
+# The universal binary replaces the per-arch builds, so it is the only darwin
+# binary a release publishes, and the one that is signed: with the release
+# certificate, not ad-hoc, so the keychain keeps naming it across upgrades. See
+# scripts/sign.sh for what that does and does not keep. codesign needs macOS,
+# which is why the release runs on a macOS runner.
 universal_binaries:
   - ids: [macos]
     replace: true
+    hooks:
+      post:
+        - cmd: ./scripts/sign.sh "{{ .Path }}"
+          output: true
 
 archives:
   - formats: [tar.gz]
@@ -57,8 +66,9 @@ homebrew_casks:
     directory: Casks
     homepage: https://github.com/branow/dbmap
     description: Index a database into a compact map an agent can read in one pass
-    # The binaries carry no Apple Developer ID, so strip the quarantine flag
-    # Homebrew sets on cask downloads; Gatekeeper otherwise refuses to run them.
+    # The binaries are signed with a self-signed certificate, not notarized
+    # with an Apple Developer ID, so strip the quarantine flag Homebrew sets on
+    # cask downloads; Gatekeeper otherwise refuses to run them.
     custom_block: |
       postflight_steps do
         if_path_exists "/usr/bin/xattr" do

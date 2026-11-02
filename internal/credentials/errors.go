@@ -58,9 +58,11 @@ const remedy = "supply the secret through the " +
 const absent = "this machine has no OS credential store, so " + remedy
 
 // blocked: a rebuild gives the binary a new code identity, so the item's access
-// control no longer names it; storing it again from this build repairs that.
+// control no longer names it; storing it again from this build repairs that,
+// which a read approved on a terminal does on its own.
 func blocked(key string) string {
-	return fmt.Sprintf("re-authorize the item - allow access when the keychain "+
-		"asks, or remove and re-add the entry so this build stores it again - "+
+	return fmt.Sprintf("re-authorize the item - run dbmap on a terminal and allow "+
+		"access when the keychain asks, or remove and re-add the entry so this "+
+		"build stores it again - "+
 		"or supply the secret through %s", EnvName(key))
 }
